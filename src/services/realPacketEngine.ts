@@ -38,9 +38,34 @@ export class RealPacketEngine {
   private liveProcesses: ProcessTrafficPoint[] = [];
   private cumulativeProcessMap: Map<string, ProcessTrafficPoint> = new Map();
   private cumulativeGeoMap: Map<string, GeoNode> = new Map();
+  private myPublicGeo: { country: string; countryCode: string } = { country: 'South Korea', countryCode: 'KR' };
 
   constructor() {
     this.initHistory();
+    this.detectMyPublicGeo();
+  }
+
+  private async detectMyPublicGeo() {
+    try {
+      const res = await fetch('http://ip-api.com/json/?fields=status,country,countryCode');
+      if (res.ok) {
+        const data = await res.json();
+        if (data && data.status === 'success' && data.country) {
+          this.myPublicGeo = { country: data.country, countryCode: data.countryCode || 'NET' };
+          this.notify();
+        }
+      }
+    } catch (e) {
+      // Fallback to system timezone
+      const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+      if (tz.includes('Seoul') || tz.includes('Korea')) {
+        this.myPublicGeo = { country: 'South Korea', countryCode: 'KR' };
+      }
+    }
+  }
+
+  public getMyPublicGeo() {
+    return this.myPublicGeo;
   }
 
   private initHistory() {

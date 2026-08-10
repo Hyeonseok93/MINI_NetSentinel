@@ -110,6 +110,7 @@ export function App() {
           cumulativeProcesses={cumulativeProcessBreakdown}
           geoNodes={geoNodes}
           cumulativeGeoNodes={cumulativeGeoNodes}
+          myPublicGeo={packetEngine.getMyPublicGeo()}
           currentBytesToday={totalBytes}
           dailyQuotaBytes={dailyQuotaBytes}
           onToggleBaseline={handleToggleBaseline}

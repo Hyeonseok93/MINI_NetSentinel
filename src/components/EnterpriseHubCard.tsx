@@ -34,6 +34,7 @@ interface EnterpriseHubCardProps {
   cumulativeProcesses?: ProcessTrafficPoint[];
   geoNodes: GeoNode[];
   cumulativeGeoNodes?: GeoNode[];
+  myPublicGeo?: { country: string; countryCode: string };
   currentBytesToday: number;
   dailyQuotaBytes: number;
   onToggleBaseline: (ip: string) => void;
@@ -68,6 +69,7 @@ export const EnterpriseHubCard: React.FC<EnterpriseHubCardProps> = ({
   cumulativeProcesses = [],
   geoNodes,
   cumulativeGeoNodes = [],
+  myPublicGeo = { country: 'South Korea', countryCode: 'KR' },
   currentBytesToday,
   dailyQuotaBytes,
   onToggleBaseline,
@@ -455,8 +457,8 @@ export const EnterpriseHubCard: React.FC<EnterpriseHubCardProps> = ({
             </div>
 
             <div className="flex items-center gap-3">
-              <span className="text-[11px] font-mono text-slate-400 bg-slate-950 px-2.5 py-1 rounded-xl border border-slate-800 hidden md:inline-block">
-                Source: KR (South Korea)
+              <span className="text-[11px] font-mono text-emerald-400 bg-slate-950 px-2.5 py-1 rounded-xl border border-slate-800 hidden md:inline-block">
+                Source PC: {myPublicGeo.countryCode} ({myPublicGeo.country})
               </span>
 
               {geoSubTab === 'cumulative' && onClearCumulativeGeoNodes && (
