@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { IpSession } from '../types/network';
+import { formatBytes } from '../utils/formatters';
 import { Search, ShieldCheck, ShieldAlert, ArrowUpDown, Globe, Server, CheckCircle2, SlidersHorizontal, Ban, ShieldX } from 'lucide-react';
 
 interface IpTableProps {
@@ -61,12 +62,6 @@ export const IpTable: React.FC<IpTableProps> = ({ sessions, onToggleBaseline, on
           return b.totalPackets - a.totalPackets;
       }
     });
-
-  const formatBytes = (bytes: number) => {
-    if (bytes < 1024) return `${bytes} B`;
-    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
-  };
 
   return (
     <div className="glass-panel rounded-2xl border border-slate-800/80 overflow-hidden">

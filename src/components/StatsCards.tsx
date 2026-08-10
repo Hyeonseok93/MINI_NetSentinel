@@ -1,4 +1,5 @@
 import React from 'react';
+import { formatBytes } from '../utils/formatters';
 import { Network, Activity, HardDriveDownload, AlertTriangle } from 'lucide-react';
 
 interface StatsCardsProps {
@@ -14,12 +15,6 @@ export const StatsCards: React.FC<StatsCardsProps> = ({
   totalBytes,
   anomaliesCount,
 }) => {
-  const formatBytes = (bytes: number) => {
-    if (bytes < 1024) return `${bytes} B`;
-    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-    return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
-  };
-
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 my-6">
       {/* Active Remote IPs */}

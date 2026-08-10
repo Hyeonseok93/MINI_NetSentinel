@@ -1,5 +1,9 @@
 import React, { useState } from 'react';
 import { IpSession, ProcessTrafficPoint, GeoNode } from '../types/network';
+import { HubSessionsTable } from './hub/HubSessionsTable';
+import { HubAppsGrid, GroupedProcess } from './hub/HubAppsGrid';
+import { HubGeoGrid } from './hub/HubGeoGrid';
+import { HubQuotaPanel } from './hub/HubQuotaPanel';
 import {
   Server,
   Cpu,
@@ -7,27 +11,11 @@ import {
   HardDrive,
   Search,
   SlidersHorizontal,
-  ArrowUpDown,
-  ShieldCheck,
-  ShieldAlert,
-  CheckCircle2,
-  Ban,
-  ShieldX,
-  Globe,
-  Navigation,
   AlertTriangle,
   CheckCircle,
-  MessageSquare,
-  Shield,
-  Gamepad2,
-  Code,
-  Cloud,
   Zap,
   TrendingUp,
   Trash2,
-  HelpCircle,
-  ChevronDown,
-  ChevronUp,
 } from 'lucide-react';
 
 interface EnterpriseHubCardProps {
@@ -72,16 +60,6 @@ export type GeoSortOptionKey =
   | 'bytes-asc'
   | 'country-asc';
 
-export interface GroupedProcess {
-  processName: string;
-  totalBytes: number;
-  totalPackets: number;
-  packetsIn: number;
-  packetsOut: number;
-  iconType: ProcessTrafficPoint['iconType'];
-  pids: ProcessTrafficPoint[];
-}
-
 export const EnterpriseHubCard: React.FC<EnterpriseHubCardProps> = ({
   sessions,
   processes,
@@ -108,32 +86,13 @@ export const EnterpriseHubCard: React.FC<EnterpriseHubCardProps> = ({
   const [appSubTab, setAppSubTab] = useState<'live' | 'cumulative'>('cumulative');
   const [appSearchTerm, setAppSearchTerm] = useState('');
   const [appSortOption, setAppSortOption] = useState<AppSortOptionKey>('bytes-desc');
-  const [expandedApps, setExpandedApps] = useState<Set<string>>(new Set());
 
   // Geo Threat Map Sub-Tab, Search & Sort State
   const [geoSubTab, setGeoSubTab] = useState<'live' | 'cumulative'>('live');
   const [geoSearchTerm, setGeoSearchTerm] = useState('');
   const [geoSortOption, setGeoSortOption] = useState<GeoSortOptionKey>('ips-desc');
 
-  const toggleAppExpand = (appName: string) => {
-    setExpandedApps((prev) => {
-      const next = new Set(prev);
-      if (next.has(appName)) {
-        next.delete(appName);
-      } else {
-        next.add(appName);
-      }
-      return next;
-    });
-  };
-
-  const formatBytes = (bytes: number) => {
-    if (bytes < 1024) return `${bytes} B`;
-    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-    if (bytes < 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
-    return `${(bytes / (1024 * 1024 * 1024)).toFixed(2)} GB`;
-  };
-
+  // 1. IP Sessions Filter & Sort
   const filteredSessions = sessions
     .filter((s) => {
       const matchSearch =
@@ -172,12 +131,11 @@ export const EnterpriseHubCard: React.FC<EnterpriseHubCardProps> = ({
       }
     });
 
+  // 2. App Breakdown Grouped Aggregation
   const liveAppNames = new Set(processes.map((p) => p.processName));
   const cumulativeAppNames = new Set(cumulativeProcesses.map((p) => p.processName));
 
   const targetProcesses = appSubTab === 'cumulative' ? (cumulativeProcesses.length > 0 ? cumulativeProcesses : processes) : processes;
-
-  // Process Aggregation by App Name (Grouped)
   const groupedAppMap = new Map<string, GroupedProcess>();
 
   targetProcesses.forEach((proc) => {
@@ -206,7 +164,6 @@ export const EnterpriseHubCard: React.FC<EnterpriseHubCardProps> = ({
       existing.packetsIn += proc.packetsIn;
       existing.packetsOut += proc.packetsOut;
 
-      // Add unique PID
       if (!existing.pids.some((p) => p.pid === proc.pid)) {
         existing.pids.push({ ...proc });
       }
@@ -232,7 +189,7 @@ export const EnterpriseHubCard: React.FC<EnterpriseHubCardProps> = ({
 
   const maxAppBytes = Math.max(...groupedProcesses.map((g) => (appSubTab === 'live' ? Math.floor(g.totalBytes / 10) : g.totalBytes)), 1);
 
-  // Geo Nodes Filtering & Sorting
+  // 3. Geo Threat Map Filtering & Sorting
   const targetGeoNodes = geoSubTab === 'cumulative' ? (cumulativeGeoNodes.length > 0 ? cumulativeGeoNodes : geoNodes) : geoNodes;
 
   const filteredGeoNodes = targetGeoNodes
@@ -259,28 +216,10 @@ export const EnterpriseHubCard: React.FC<EnterpriseHubCardProps> = ({
       }
     });
 
+  // 4. Quota Calculations
   const quotaPercent = Math.min(Math.round((currentBytesToday / dailyQuotaBytes) * 100), 100);
   const isQuotaWarning = quotaPercent >= 80;
   const isQuotaExceeded = quotaPercent >= 100;
-
-  const renderProcIcon = (type: ProcessTrafficPoint['iconType']) => {
-    switch (type) {
-      case 'browser':
-        return <Globe className="w-4 h-4 text-cyan-400" />;
-      case 'chat':
-        return <MessageSquare className="w-4 h-4 text-purple-400" />;
-      case 'system':
-        return <Shield className="w-4 h-4 text-amber-400" />;
-      case 'game':
-        return <Gamepad2 className="w-4 h-4 text-emerald-400" />;
-      case 'code':
-        return <Code className="w-4 h-4 text-sky-400" />;
-      case 'cloud':
-        return <Cloud className="w-4 h-4 text-blue-400" />;
-      default:
-        return <Cpu className="w-4 h-4 text-slate-400" />;
-    }
-  };
 
   return (
     <div className="glass-panel rounded-2xl border border-slate-800/80 overflow-hidden flex flex-col space-y-0">
@@ -624,399 +563,35 @@ export const EnterpriseHubCard: React.FC<EnterpriseHubCardProps> = ({
 
       {/* Shared Container with Shared Max Height & Custom Scrollbar */}
       <div className="max-h-[800px] overflow-y-auto custom-scrollbar flex-1">
-        {/* TAB 1: IP Sessions Table */}
         {activeTab === 'sessions' && (
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs border-collapse">
-              <thead className="sticky top-0 bg-slate-900/95 backdrop-blur z-20 shadow-md">
-                <tr className="text-slate-400 border-b border-slate-800 font-medium">
-                  <th className="py-3 px-4">Status & IP Address</th>
-                  <th className="py-3 px-4">Resolved Domain</th>
-                  <th className="py-3 px-4">Location</th>
-                  <th className="py-3 px-4">Protocol/Port</th>
-                  <th className="py-3 px-4">
-                    <div className="flex items-center gap-1">
-                      <span>Packets (In / Out)</span>
-                      <ArrowUpDown className="w-3 h-3 text-cyan-400" />
-                    </div>
-                  </th>
-                  <th className="py-3 px-4">
-                    <div className="flex items-center gap-1">
-                      <span>Total Volume</span>
-                      <ArrowUpDown className="w-3 h-3 text-cyan-400" />
-                    </div>
-                  </th>
-                  <th className="py-3 px-4">Last Seen</th>
-                  <th className="py-3 px-4 text-right">Verification & Firewall Actions</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-800/60">
-                {filteredSessions.length === 0 ? (
-                  <tr>
-                    <td colSpan={8} className="py-12 text-center text-slate-500 font-mono">
-                      No IP sessions match current filter criteria.
-                    </td>
-                  </tr>
-                ) : (
-                  filteredSessions.map((session) => (
-                    <tr
-                      key={session.ip}
-                      className="hover:bg-slate-900/50 transition-colors group text-slate-300"
-                    >
-                      {/* Status & IP */}
-                      <td className="py-3 px-4 font-mono font-medium">
-                        <div className="flex items-center gap-2">
-                          {session.status === 'blocked' ? (
-                            <span className="w-2 h-2 rounded-full bg-rose-600 shadow-[0_0_8px_rgba(225,29,72,1)]" title="Firewall Blocked" />
-                          ) : session.isBaseline ? (
-                            <span className="w-2 h-2 rounded-full bg-emerald-400 shadow-[0_0_6px_rgba(52,211,153,0.8)]" title="Trusted Baseline" />
-                          ) : session.status === 'suspicious' ? (
-                            <span className="w-2 h-2 rounded-full bg-rose-500 shadow-[0_0_6px_rgba(244,63,94,0.8)] animate-ping" title="Suspicious Threat" />
-                          ) : session.status === 'new' ? (
-                            <span className="w-2 h-2 rounded-full bg-amber-400 shadow-[0_0_6px_rgba(251,191,36,0.8)] animate-pulse" title="New Initial Connection" />
-                          ) : (
-                            <span className="w-2 h-2 rounded-full bg-sky-400" title="Normal Session" />
-                          )}
-                          <span className={`text-slate-100 group-hover:text-cyan-300 transition-colors ${session.status === 'blocked' ? 'line-through opacity-50' : ''}`}>
-                            {session.ip}
-                          </span>
-                          {session.status === 'blocked' ? (
-                            <span className="px-1.5 py-0.2 text-[9px] font-bold rounded bg-rose-950 text-rose-400 border border-rose-800">
-                              BLOCKED
-                            </span>
-                          ) : session.status === 'new' && !session.isBaseline ? (
-                            <span className="px-1.5 py-0.2 text-[9px] font-bold rounded bg-amber-500/20 text-amber-300 border border-amber-500/30">
-                              NEW
-                            </span>
-                          ) : null}
-                        </div>
-                      </td>
-
-                      {/* Domain */}
-                      <td className="py-3 px-4 font-mono text-slate-400">
-                        {session.domain ? (
-                          <span className="text-slate-200">{session.domain}</span>
-                        ) : (
-                          <span className="text-slate-600 italic">Unresolved</span>
-                        )}
-                      </td>
-
-                      {/* Location */}
-                      <td className="py-3 px-4">
-                        <div className="flex items-center gap-1.5 text-slate-300">
-                          <Globe className="w-3 h-3 text-slate-500" />
-                          <span>{session.country}</span>
-                        </div>
-                      </td>
-
-                      {/* Protocol / Port */}
-                      <td className="py-3 px-4">
-                        <span className="px-2 py-0.5 text-[10px] font-mono rounded bg-slate-800 text-slate-300 border border-slate-700">
-                          {session.protocol}:{session.port}
-                        </span>
-                      </td>
-
-                      {/* Packets */}
-                      <td className="py-3 px-4 font-mono text-slate-200">
-                        <span className="text-cyan-400 font-semibold">{session.totalPackets.toLocaleString()}</span>
-                        <span className="text-slate-500 text-[10px] ml-1">
-                          ({session.packetsIn} ↓ / {session.packetsOut} ↑)
-                        </span>
-                      </td>
-
-                      {/* Bytes */}
-                      <td className="py-3 px-4 font-mono text-slate-300">
-                        {formatBytes(session.totalBytes)}
-                      </td>
-
-                      {/* Last Seen */}
-                      <td className="py-3 px-4 text-slate-400 text-[11px] font-mono">
-                        {session.lastSeen}
-                      </td>
-
-                      {/* Actions */}
-                      <td className="py-3 px-4 text-right">
-                        <div className="flex items-center justify-end gap-1.5">
-                          {session.status === 'blocked' ? (
-                            <button
-                              onClick={() => onToggleBlock(session.ip)}
-                              className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-semibold bg-rose-500/20 text-rose-300 border border-rose-500/40 hover:bg-rose-500/30 transition-all"
-                              title="Unblock IP in Firewall"
-                            >
-                              <ShieldX className="w-3.5 h-3.5 text-rose-400" />
-                              <span>Unblock IP</span>
-                            </button>
-                          ) : (
-                            <>
-                              {session.isBaseline ? (
-                                <button
-                                  onClick={() => onToggleBaseline(session.ip)}
-                                  className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-medium bg-emerald-950/80 text-emerald-400 border border-emerald-800/60 hover:bg-rose-950/50 hover:text-rose-400 hover:border-rose-800 transition-all"
-                                  title="Click to remove from trusted baseline"
-                                >
-                                  <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
-                                  <span>Trusted (Baseline)</span>
-                                </button>
-                              ) : session.status === 'new' ? (
-                                <button
-                                  onClick={() => onVerifyNormal(session.ip)}
-                                  className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-semibold bg-amber-500/20 text-amber-300 border border-amber-500/40 hover:bg-amber-500/30 shadow-sm transition-all"
-                                  title="Verify this initial connection as Normal"
-                                >
-                                  <CheckCircle2 className="w-3.5 h-3.5 text-amber-400" />
-                                  <span>Verify Normal</span>
-                                </button>
-                              ) : (
-                                <button
-                                  onClick={() => onToggleBaseline(session.ip)}
-                                  className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-medium bg-slate-900 text-sky-400 border border-slate-800 hover:bg-emerald-950/50 hover:text-emerald-300 hover:border-emerald-800 transition-all"
-                                  title="Promote to Trusted Baseline"
-                                >
-                                  <ShieldAlert className="w-3.5 h-3.5 text-sky-400" />
-                                  <span>Trust IP</span>
-                                </button>
-                              )}
-
-                              <button
-                                onClick={() => onToggleBlock(session.ip)}
-                                className="p-1 rounded-lg text-slate-500 hover:text-rose-400 hover:bg-rose-950/40 border border-transparent hover:border-rose-800/50 transition-all"
-                                title="Instant Firewall Kill-Switch Block"
-                              >
-                                <Ban className="w-3.5 h-3.5" />
-                              </button>
-                            </>
-                          )}
-                        </div>
-                      </td>
-                    </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
-          </div>
+          <HubSessionsTable
+            sessions={filteredSessions}
+            onToggleBaseline={onToggleBaseline}
+            onVerifyNormal={onVerifyNormal}
+            onToggleBlock={onToggleBlock}
+          />
         )}
 
-        {/* TAB 2: App Breakdown Full View (Grouped with Expandable PID Breakdown) */}
         {activeTab === 'apps' && (
-          <div className="p-6 space-y-4">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {groupedProcesses.length === 0 ? (
-                <div className="col-span-2 py-12 text-center text-slate-500 font-mono">
-                  No Windows app processes match the search criteria.
-                </div>
-              ) : (
-                groupedProcesses.map((app) => {
-                  const isExpanded = expandedApps.has(app.processName);
-                  const currentDisplayBytes = appSubTab === 'live' ? Math.floor(app.totalBytes / 10) : app.totalBytes;
-                  const percent = Math.min(Math.round((currentDisplayBytes / maxAppBytes) * 100), 100);
-
-                  return (
-                    <div
-                      key={app.processName}
-                      className={`p-4 rounded-xl bg-slate-900/60 border transition-all space-y-3 ${
-                        isExpanded ? 'border-purple-500/60 bg-slate-900/90 shadow-lg' : 'border-slate-800/80 hover:border-purple-500/40'
-                      }`}
-                    >
-                      {/* Main Grouped Header */}
-                      <div
-                        onClick={() => toggleAppExpand(app.processName)}
-                        className="flex items-center justify-between text-xs font-mono cursor-pointer select-none group"
-                      >
-                        <div className="flex items-center gap-2.5">
-                          <div className="p-2 rounded-xl bg-slate-950 border border-slate-800 group-hover:border-purple-500/50 transition-all">
-                            {renderProcIcon(app.iconType)}
-                          </div>
-                          <div>
-                            <div className="flex items-center gap-2">
-                              <h4 className="font-bold text-sm text-slate-100 group-hover:text-purple-300 transition-colors">
-                                {app.processName}
-                              </h4>
-                              <span className="px-2 py-0.5 text-[10px] font-bold rounded-full bg-purple-950 text-purple-300 border border-purple-800/80">
-                                {app.pids.length} {app.pids.length === 1 ? 'PID' : 'PIDs'}
-                              </span>
-                            </div>
-                            <span className="text-[10px] text-slate-400 font-mono flex items-center gap-1 mt-0.5">
-                              <span>Click to {isExpanded ? 'collapse' : 'expand PIDs list'}</span>
-                              {isExpanded ? <ChevronUp className="w-3 h-3 text-purple-400" /> : <ChevronDown className="w-3 h-3 text-slate-500" />}
-                            </span>
-                          </div>
-                        </div>
-
-                        <div className="text-right">
-                          <span className="font-bold text-sm text-purple-400">
-                            {formatBytes(currentDisplayBytes)}
-                            {appSubTab === 'live' ? '/s' : ''}
-                          </span>
-                          <div className="text-[10px] text-slate-500 font-mono">
-                            {appSubTab === 'live'
-                              ? `${Math.floor(app.packetsIn / 5)} ↓ / ${Math.floor(app.packetsOut / 5)} ↑ pkts/s`
-                              : `${app.packetsIn.toLocaleString()} ↓ / ${app.packetsOut.toLocaleString()} ↑ pkts`}
-                          </div>
-                        </div>
-                      </div>
-
-                      {/* Main Group Progress Bar */}
-                      <div className="h-2 w-full bg-slate-950 rounded-full overflow-hidden border border-slate-800/80">
-                        <div
-                          className={`h-full rounded-full transition-all duration-500 ${
-                            appSubTab === 'live'
-                              ? 'bg-gradient-to-r from-purple-500 to-pink-500 shadow-[0_0_8px_rgba(236,72,153,0.6)]'
-                              : 'bg-gradient-to-r from-purple-500 to-cyan-400 shadow-[0_0_8px_rgba(168,85,247,0.6)]'
-                          }`}
-                          style={{ width: `${percent}%` }}
-                        />
-                      </div>
-
-                      {/* Expandable Accordion: All Child PIDs List */}
-                      {isExpanded && (
-                        <div className="pt-2 border-t border-slate-800/80 space-y-2 animate-fadeIn">
-                          <div className="flex items-center justify-between text-[11px] font-semibold text-slate-400 pb-1">
-                            <span>Detailed Sub-Processes List ({app.pids.length})</span>
-                            <span className="text-[10px] font-mono text-purple-300">Live Telemetry</span>
-                          </div>
-                          <div className="max-h-48 overflow-y-auto custom-scrollbar space-y-1.5 pr-1">
-                            {app.pids.map((subProc) => {
-                              const subBytes = appSubTab === 'live' ? Math.floor(subProc.bytesTotal / 10) : subProc.bytesTotal;
-
-                              return (
-                                <div
-                                  key={subProc.pid}
-                                  className="flex items-center justify-between p-2 rounded-lg bg-slate-950/80 border border-slate-800 text-xs font-mono"
-                                >
-                                  <div className="flex items-center gap-2">
-                                    <span className="px-1.5 py-0.5 rounded bg-slate-900 text-purple-300 border border-slate-800 font-bold text-[10px]">
-                                      PID: {subProc.pid}
-                                    </span>
-                                    <span className="text-slate-300 truncate max-w-[140px] sm:max-w-xs">{app.processName}</span>
-                                  </div>
-                                  <div className="text-right">
-                                    <span className="font-bold text-slate-200 text-[11px]">{formatBytes(subBytes)}</span>
-                                    <span className="text-slate-500 text-[10px] ml-1.5">
-                                      ({subProc.packetsIn} ↓ / {subProc.packetsOut} ↑)
-                                    </span>
-                                  </div>
-                                </div>
-                              );
-                            })}
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  );
-                })
-              )}
-            </div>
-          </div>
+          <HubAppsGrid
+            groupedProcesses={groupedProcesses}
+            appSubTab={appSubTab}
+            maxAppBytes={maxAppBytes}
+          />
         )}
 
-        {/* TAB 3: Geo Threat Map Full View */}
         {activeTab === 'geo' && (
-          <div className="p-6 space-y-6">
-            <div className="relative w-full min-h-[22rem] bg-slate-950/90 rounded-2xl border border-slate-800 overflow-hidden flex items-center justify-center p-6">
-              <div className="absolute inset-0 bg-[linear-gradient(to_right,#1e293b20_1px,transparent_1px),linear-gradient(to_bottom,#1e293b20_1px,transparent_1px)] bg-[size:24px_24px]" />
-
-              <div className="relative z-10 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-4 w-full">
-                {filteredGeoNodes.length === 0 ? (
-                  <div className="col-span-5 py-12 text-center text-slate-500 font-mono">
-                    No country geo nodes match the search criteria.
-                  </div>
-                ) : (
-                  filteredGeoNodes.map((node) => {
-                    const isUnknown = node.countryCode === 'UNK' || node.country === 'Unknown Location';
-
-                    return (
-                      <div
-                        key={node.country}
-                        className={`p-4 rounded-xl bg-slate-900/90 border flex flex-col items-center justify-center text-center gap-2 shadow-xl transition-all ${
-                          isUnknown
-                            ? 'border-purple-800/80 hover:border-purple-500/80 bg-purple-950/20'
-                            : 'border-slate-800 hover:border-emerald-500/50'
-                        }`}
-                      >
-                        <div
-                          className={`p-2.5 rounded-xl border ${
-                            isUnknown
-                              ? 'bg-purple-950/80 text-purple-400 border-purple-800/60'
-                              : 'bg-emerald-950/80 text-emerald-400 border-emerald-800/60'
-                          }`}
-                        >
-                          {isUnknown ? <HelpCircle className="w-5 h-5 text-purple-400" /> : <Navigation className="w-5 h-5" />}
-                        </div>
-                        <span className="font-bold text-xs text-slate-100">{node.country} ({node.countryCode})</span>
-                        <span
-                          className={`text-[10px] font-mono px-2 py-0.5 rounded border ${
-                            isUnknown
-                              ? 'text-purple-300 bg-purple-950/80 border-purple-800/60'
-                              : 'text-emerald-400 bg-emerald-950/60 border-emerald-800/50'
-                          }`}
-                        >
-                          {node.activeIpCount} Active IPs
-                        </span>
-                        <span className="text-[11px] font-mono text-slate-400">{formatBytes(node.totalBytes)}</span>
-                      </div>
-                    );
-                  })
-                )}
-              </div>
-            </div>
-          </div>
+          <HubGeoGrid filteredGeoNodes={filteredGeoNodes} />
         )}
 
-        {/* TAB 4: Bandwidth Quota Full View */}
         {activeTab === 'quota' && (
-          <div className="p-6 space-y-6 max-w-3xl mx-auto">
-            <div className="p-6 rounded-2xl bg-slate-900/60 border border-slate-800 space-y-4">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2.5">
-                  <HardDrive className="w-5 h-5 text-amber-400" />
-                  <h3 className="font-bold text-base text-slate-100">Daily Bandwidth Quota Monitor</h3>
-                </div>
-
-                {isQuotaExceeded ? (
-                  <span className="flex items-center gap-1 text-xs font-mono text-rose-400 bg-rose-950/80 px-3 py-1 rounded-lg border border-rose-800 animate-pulse font-bold">
-                    <AlertTriangle className="w-4 h-4" /> QUOTA EXCEEDED
-                  </span>
-                ) : isQuotaWarning ? (
-                  <span className="flex items-center gap-1 text-xs font-mono text-amber-400 bg-amber-950/80 px-3 py-1 rounded-lg border border-amber-800 font-bold">
-                    <AlertTriangle className="w-4 h-4" /> 80% Threshold Reached
-                  </span>
-                ) : (
-                  <span className="flex items-center gap-1 text-xs font-mono text-emerald-400 bg-emerald-950/60 px-3 py-1 rounded-lg border border-emerald-800">
-                    <CheckCircle className="w-4 h-4" /> Within Normal Cap
-                  </span>
-                )}
-              </div>
-
-              <div className="space-y-3">
-                <div className="flex items-center justify-between text-sm font-mono">
-                  <span className="text-slate-400">Total Today Usage:</span>
-                  <div className="text-right">
-                    <span className="font-bold text-amber-300 text-base">{formatBytes(currentBytesToday)}</span>
-                    <span className="text-slate-500 text-xs"> / {formatBytes(dailyQuotaBytes)} Limit</span>
-                  </div>
-                </div>
-
-                <div className="h-4 w-full bg-slate-950 rounded-full p-0.5 border border-slate-800 overflow-hidden">
-                  <div
-                    className={`h-full rounded-full transition-all duration-500 ${
-                      isQuotaExceeded
-                        ? 'bg-rose-500 shadow-[0_0_12px_rgba(244,63,94,0.8)]'
-                        : isQuotaWarning
-                        ? 'bg-amber-400 shadow-[0_0_12px_rgba(251,191,36,0.8)]'
-                        : 'bg-gradient-to-r from-amber-500 to-cyan-400 shadow-[0_0_10px_rgba(245,158,11,0.5)]'
-                    }`}
-                    style={{ width: `${quotaPercent}%` }}
-                  />
-                </div>
-
-                <div className="flex items-center justify-between text-xs font-mono text-slate-500 pt-1">
-                  <span>0 GB</span>
-                  <span className="font-bold text-slate-300">{quotaPercent}% Consumed</span>
-                  <span>{formatBytes(dailyQuotaBytes)}</span>
-                </div>
-              </div>
-            </div>
-          </div>
+          <HubQuotaPanel
+            currentBytesToday={currentBytesToday}
+            dailyQuotaBytes={dailyQuotaBytes}
+            quotaPercent={quotaPercent}
+            isQuotaWarning={isQuotaWarning}
+            isQuotaExceeded={isQuotaExceeded}
+          />
         )}
       </div>
     </div>
