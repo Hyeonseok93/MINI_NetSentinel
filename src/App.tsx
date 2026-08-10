@@ -70,6 +70,7 @@ export function App() {
   const processBreakdown = packetEngine.getProcessBreakdown();
   const cumulativeProcessBreakdown = packetEngine.getCumulativeProcessBreakdown();
   const geoNodes = packetEngine.getGeoNodes();
+  const cumulativeGeoNodes = packetEngine.getCumulativeGeoNodes();
 
   // Daily Quota: 10 GB limit for demonstration
   const dailyQuotaBytes = 10 * 1024 * 1024 * 1024;
@@ -108,12 +109,14 @@ export function App() {
           processes={processBreakdown}
           cumulativeProcesses={cumulativeProcessBreakdown}
           geoNodes={geoNodes}
+          cumulativeGeoNodes={cumulativeGeoNodes}
           currentBytesToday={totalBytes}
           dailyQuotaBytes={dailyQuotaBytes}
           onToggleBaseline={handleToggleBaseline}
           onVerifyNormal={handleVerifyNormal}
           onToggleBlock={handleToggleBlockIp}
           onClearCumulativeProcesses={() => packetEngine.clearCumulativeProcesses()}
+          onClearCumulativeGeoNodes={() => packetEngine.clearCumulativeGeoNodes()}
         />
       </main>
 

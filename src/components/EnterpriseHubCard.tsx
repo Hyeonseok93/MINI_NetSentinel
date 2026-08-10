@@ -33,12 +33,14 @@ interface EnterpriseHubCardProps {
   processes: ProcessTrafficPoint[];
   cumulativeProcesses?: ProcessTrafficPoint[];
   geoNodes: GeoNode[];
+  cumulativeGeoNodes?: GeoNode[];
   currentBytesToday: number;
   dailyQuotaBytes: number;
   onToggleBaseline: (ip: string) => void;
   onVerifyNormal: (ip: string) => void;
   onToggleBlock: (ip: string) => void;
   onClearCumulativeProcesses?: () => void;
+  onClearCumulativeGeoNodes?: () => void;
 }
 
 export type MainTabKey = 'sessions' | 'apps' | 'geo' | 'quota';
@@ -65,12 +67,14 @@ export const EnterpriseHubCard: React.FC<EnterpriseHubCardProps> = ({
   processes,
   cumulativeProcesses = [],
   geoNodes,
+  cumulativeGeoNodes = [],
   currentBytesToday,
   dailyQuotaBytes,
   onToggleBaseline,
   onVerifyNormal,
   onToggleBlock,
   onClearCumulativeProcesses,
+  onClearCumulativeGeoNodes,
 }) => {
   const [activeTab, setActiveTab] = useState<MainTabKey>('sessions');
 
@@ -81,6 +85,9 @@ export const EnterpriseHubCard: React.FC<EnterpriseHubCardProps> = ({
 
   // App Breakdown Sub-Tab, Search & Sort State
   const [appSubTab, setAppSubTab] = useState<'live' | 'cumulative'>('cumulative');
+
+  // Geo Threat Map Sub-Tab State
+  const [geoSubTab, setGeoSubTab] = useState<'live' | 'cumulative'>('live');
   const [appSearchTerm, setAppSearchTerm] = useState('');
   const [appSortOption, setAppSortOption] = useState<AppSortOptionKey>('bytes-desc');
 
@@ -413,14 +420,56 @@ export const EnterpriseHubCard: React.FC<EnterpriseHubCardProps> = ({
         )}
 
         {activeTab === 'geo' && (
-          <div className="pt-2 flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <Globe2 className="w-4 h-4 text-emerald-400" />
-              <h3 className="text-xs font-semibold text-slate-200">Global Threat Geo-Location Telemetry</h3>
+          <div className="pt-2 flex flex-col sm:flex-row items-center justify-between gap-3 w-full">
+            {/* Geo Sub-Tabs */}
+            <div className="flex items-center gap-1.5 bg-slate-950 p-1 rounded-xl border border-slate-800 shrink-0">
+              <button
+                onClick={() => setGeoSubTab('live')}
+                className={`py-1.5 px-3 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 whitespace-nowrap ${
+                  geoSubTab === 'live'
+                    ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 shadow-sm'
+                    : 'text-slate-400 hover:text-slate-200'
+                }`}
+              >
+                <Zap className="w-3.5 h-3.5 text-emerald-400 animate-pulse shrink-0" />
+                <span>Live Real-time</span>
+                <span className="px-1.5 py-0.2 text-[10px] bg-slate-900 rounded-full text-emerald-300 font-mono border border-emerald-500/30">
+                  {geoNodes.length}
+                </span>
+              </button>
+
+              <button
+                onClick={() => setGeoSubTab('cumulative')}
+                className={`py-1.5 px-3 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 whitespace-nowrap ${
+                  geoSubTab === 'cumulative'
+                    ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 shadow-sm'
+                    : 'text-slate-400 hover:text-slate-200'
+                }`}
+              >
+                <TrendingUp className="w-3.5 h-3.5 text-cyan-400 shrink-0" />
+                <span>Cumulative Total</span>
+                <span className="px-1.5 py-0.2 text-[10px] bg-slate-900 rounded-full text-cyan-300 font-mono border border-cyan-500/30">
+                  {cumulativeGeoNodes.length > 0 ? cumulativeGeoNodes.length : geoNodes.length}
+                </span>
+              </button>
             </div>
-            <span className="text-[11px] font-mono text-slate-400 bg-slate-950 px-2 py-0.5 rounded-md border border-slate-800">
-              Source Location: KR (South Korea)
-            </span>
+
+            <div className="flex items-center gap-3">
+              <span className="text-[11px] font-mono text-slate-400 bg-slate-950 px-2.5 py-1 rounded-xl border border-slate-800 hidden md:inline-block">
+                Source: KR (South Korea)
+              </span>
+
+              {geoSubTab === 'cumulative' && onClearCumulativeGeoNodes && (
+                <button
+                  onClick={onClearCumulativeGeoNodes}
+                  className="py-1.5 px-3 rounded-xl text-xs font-bold text-rose-400 hover:text-rose-200 bg-rose-950/80 hover:bg-rose-900 border border-rose-800/80 transition-all flex items-center gap-1.5 shrink-0 shadow-sm"
+                  title="Clear accumulated geo node history"
+                >
+                  <Trash2 className="w-3.5 h-3.5 text-rose-400" />
+                  <span>Clear History</span>
+                </button>
+              )}
+            </div>
           </div>
         )}
 
@@ -681,14 +730,11 @@ export const EnterpriseHubCard: React.FC<EnterpriseHubCardProps> = ({
         {/* TAB 3: Geo Threat Map Full View */}
         {activeTab === 'geo' && (
           <div className="p-6 space-y-6">
-            <div className="relative w-full h-96 bg-slate-950/90 rounded-2xl border border-slate-800 overflow-hidden flex items-center justify-center p-4">
+            <div className="relative w-full min-h-[22rem] bg-slate-950/90 rounded-2xl border border-slate-800 overflow-hidden flex items-center justify-center p-6">
               <div className="absolute inset-0 bg-[linear-gradient(to_right,#1e293b20_1px,transparent_1px),linear-gradient(to_bottom,#1e293b20_1px,transparent_1px)] bg-[size:24px_24px]" />
-              <svg className="w-full h-full absolute inset-0 text-slate-800 opacity-30" viewBox="0 0 800 400" fill="currentColor">
-                <path d="M150,120 Q200,80 300,110 T500,130 T700,100 Q750,200 650,280 T400,320 T150,250 Z" />
-              </svg>
 
               <div className="relative z-10 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-4 w-full">
-                {geoNodes.map((node) => {
+                {(geoSubTab === 'cumulative' ? (cumulativeGeoNodes.length > 0 ? cumulativeGeoNodes : geoNodes) : geoNodes).map((node) => {
                   const isUnknown = node.countryCode === 'UNK' || node.country === 'Unknown Location';
 
                   return (

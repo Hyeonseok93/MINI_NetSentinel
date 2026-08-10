@@ -1,4 +1,4 @@
-import { IpSession, AnomalyEvent, TrafficHistoryPoint, ProcessTrafficPoint } from '../types/network';
+import { IpSession, AnomalyEvent, TrafficHistoryPoint, ProcessTrafficPoint, GeoNode } from '../types/network';
 
 // Real Native Network Session interface returned from Rust backend
 interface NativeIpSession {
@@ -37,6 +37,7 @@ export class RealPacketEngine {
   private blockedIps: Set<string> = new Set();
   private liveProcesses: ProcessTrafficPoint[] = [];
   private cumulativeProcessMap: Map<string, ProcessTrafficPoint> = new Map();
+  private cumulativeGeoMap: Map<string, GeoNode> = new Map();
 
   constructor() {
     this.initHistory();
@@ -404,16 +405,35 @@ export class RealPacketEngine {
 
     const result: import('../types/network').GeoNode[] = [];
     geoMap.forEach((val, country) => {
-      result.push({
+      const nodeItem = {
         country,
         countryCode: val.code || 'NET',
         activeIpCount: val.count,
         totalBytes: val.bytes,
         lat: val.lat,
         lng: val.lng,
-      });
+      };
+      result.push(nodeItem);
+
+      // Persist into cumulativeGeoMap
+      if (!this.cumulativeGeoMap.has(country)) {
+        this.cumulativeGeoMap.set(country, { ...nodeItem });
+      } else {
+        const cNode = this.cumulativeGeoMap.get(country)!;
+        cNode.activeIpCount = Math.max(cNode.activeIpCount, val.count);
+        cNode.totalBytes = Math.max(cNode.totalBytes, val.bytes);
+      }
     });
     return result.sort((a, b) => b.activeIpCount - a.activeIpCount);
+  }
+
+  public getCumulativeGeoNodes(): import('../types/network').GeoNode[] {
+    return Array.from(this.cumulativeGeoMap.values()).sort((a, b) => b.totalBytes - a.totalBytes);
+  }
+
+  public clearCumulativeGeoNodes() {
+    this.cumulativeGeoMap.clear();
+    this.notify();
   }
 
   public subscribe(fn: () => void) {
