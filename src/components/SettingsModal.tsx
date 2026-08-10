@@ -67,70 +67,14 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
           </button>
         </div>
 
-        {/* Content */}
+        {/* Content Body */}
         <div className="p-5 space-y-5 text-xs text-slate-300">
-          {/* Traffic Spike Slider */}
-          <div>
-            <div className="flex justify-between items-center mb-1.5">
-              <label className="font-semibold text-slate-200 flex items-center gap-1.5">
-                <Cpu className="w-3.5 h-3.5 text-amber-400" />
-                Traffic Spike Threshold
-              </label>
-              <span className="font-mono text-cyan-400 font-bold">{spikeThreshold} pkts/sec</span>
-            </div>
-            <input
-              type="range"
-              min="10"
-              max="150"
-              value={spikeThreshold}
-              onChange={(e) => setSpikeThreshold(Number(e.target.value))}
-              className="w-full h-1.5 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-cyan-400"
-            />
-            <p className="text-[11px] text-slate-500 mt-1">
-              Triggers warning when an IP exceeds this packet rate in 1 second.
-            </p>
-          </div>
-
-          {/* Toast Notification Toggle */}
-          <div className="flex items-center justify-between p-3 rounded-xl bg-slate-900/60 border border-slate-800">
-            <div>
-              <p className="font-semibold text-slate-200 flex items-center gap-1.5">
-                <Bell className="w-3.5 h-3.5 text-cyan-400" />
-                Windows Toast Notification
-              </p>
-              <p className="text-[11px] text-slate-500 mt-0.5">Alert on new unrecognized IP connections.</p>
-            </div>
-            <input
-              type="checkbox"
-              checked={notifyNewIp}
-              onChange={(e) => setNotifyNewIp(e.target.checked)}
-              className="w-4 h-4 accent-cyan-400 rounded cursor-pointer"
-            />
-          </div>
-
-          {/* Auto Firewall Block Toggle */}
-          <div className="flex items-center justify-between p-3 rounded-xl bg-slate-900/60 border border-slate-800">
-            <div>
-              <p className="font-semibold text-slate-200 flex items-center gap-1.5">
-                <ShieldCheck className="w-3.5 h-3.5 text-rose-400" />
-                Kernel WFP Auto-Block
-              </p>
-              <p className="text-[11px] text-slate-500 mt-0.5">Auto-block suspicious blacklisted IPs.</p>
-            </div>
-            <input
-              type="checkbox"
-              checked={autoBlock}
-              onChange={(e) => setAutoBlock(e.target.checked)}
-              className="w-4 h-4 accent-rose-400 rounded cursor-pointer"
-            />
-          </div>
-
-          {/* GeoIP Database Management Section */}
+          {/* SECTION 1: GeoIP Database Management Section */}
           <div className="p-3.5 rounded-xl bg-slate-900/80 border border-slate-800 space-y-2.5">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-1.5 font-semibold text-slate-200">
                 <Globe className="w-3.5 h-3.5 text-emerald-400" />
-                <span>MaxMind GeoLite2 DB</span>
+                <span>MaxMind GeoLite2 DB Engine</span>
               </div>
               <span className="px-2 py-0.5 text-[9px] font-mono font-bold rounded-full bg-emerald-950 text-emerald-300 border border-emerald-800">
                 ACTIVE
@@ -152,7 +96,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
             </button>
           </div>
 
-          {/* Adapter Interface */}
+          {/* SECTION 2: Adapter Interface */}
           <div>
             <label className="font-semibold text-slate-200 block mb-1.5">
               Active Network Adapter
@@ -170,19 +114,75 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
               <option value="Npcap Loopback Adapter">Npcap Loopback Adapter</option>
             </select>
           </div>
+
+          {/* SECTION 3: Traffic Spike Slider */}
+          <div>
+            <div className="flex justify-between items-center mb-1.5">
+              <label className="font-semibold text-slate-200 flex items-center gap-1.5">
+                <Cpu className="w-3.5 h-3.5 text-amber-400" />
+                Traffic Spike Threshold
+              </label>
+              <span className="font-mono text-cyan-400 font-bold">{spikeThreshold} pkts/sec</span>
+            </div>
+            <input
+              type="range"
+              min="10"
+              max="150"
+              value={spikeThreshold}
+              onChange={(e) => setSpikeThreshold(Number(e.target.value))}
+              className="w-full h-1.5 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-cyan-400"
+            />
+            <p className="text-[11px] text-slate-500 mt-1">
+              Triggers warning when an IP exceeds this packet rate in 1 second.
+            </p>
+          </div>
+
+          {/* SECTION 4: Toast Notification Toggle */}
+          <div className="flex items-center justify-between p-3 rounded-xl bg-slate-900/60 border border-slate-800">
+            <div>
+              <p className="font-semibold text-slate-200 flex items-center gap-1.5">
+                <Bell className="w-3.5 h-3.5 text-cyan-400" />
+                Windows Toast Notification
+              </p>
+              <p className="text-[11px] text-slate-500 mt-0.5">Alert on new unrecognized IP connections.</p>
+            </div>
+            <input
+              type="checkbox"
+              checked={notifyNewIp}
+              onChange={(e) => setNotifyNewIp(e.target.checked)}
+              className="w-4 h-4 accent-cyan-400 rounded cursor-pointer"
+            />
+          </div>
+
+          {/* SECTION 5: Auto Firewall Block Toggle */}
+          <div className="flex items-center justify-between p-3 rounded-xl bg-slate-900/60 border border-slate-800">
+            <div>
+              <p className="font-semibold text-slate-200 flex items-center gap-1.5">
+                <ShieldCheck className="w-3.5 h-3.5 text-rose-400" />
+                Kernel WFP Auto-Block
+              </p>
+              <p className="text-[11px] text-slate-500 mt-0.5">Auto-block suspicious blacklisted IPs.</p>
+            </div>
+            <input
+              type="checkbox"
+              checked={autoBlock}
+              onChange={(e) => setAutoBlock(e.target.checked)}
+              className="w-4 h-4 accent-rose-400 rounded cursor-pointer"
+            />
+          </div>
         </div>
 
-        {/* Footer */}
-        <div className="p-4 border-t border-slate-800 bg-slate-900/60 flex justify-end gap-2">
+        {/* Footer with High-Visibility High-Contrast Save Button */}
+        <div className="p-4 border-t border-slate-800 bg-slate-900/90 flex justify-end items-center gap-3">
           <button
             onClick={onClose}
-            className="px-3.5 py-1.5 rounded-xl text-xs text-slate-400 hover:bg-slate-800 hover:text-slate-200 transition-colors"
+            className="px-4 py-2 rounded-xl text-xs font-semibold text-slate-300 hover:text-white bg-slate-800/80 hover:bg-slate-700 transition-all border border-slate-700"
           >
             Cancel
           </button>
           <button
             onClick={handleSave}
-            className="px-4 py-1.5 rounded-xl text-xs font-semibold bg-gradient-to-r from-cyan-500 to-emerald-500 text-slate-950 hover:brightness-110 transition-all shadow-md"
+            className="px-5 py-2 rounded-xl text-xs font-extrabold bg-cyan-400 hover:bg-cyan-300 text-slate-950 transition-all shadow-[0_0_15px_rgba(34,211,238,0.8)] border border-cyan-300 cursor-pointer"
           >
             Save Configuration
           </button>
