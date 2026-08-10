@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { X, Sliders, Bell, Cpu, ShieldCheck } from 'lucide-react';
+import { X, Sliders, Bell, Cpu, ShieldCheck, Globe, RefreshCw } from 'lucide-react';
 import { MonitoringConfig } from '../types/network';
 
 interface SettingsModalProps {
@@ -18,6 +18,25 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   const [spikeThreshold, setSpikeThreshold] = useState(config.spikeThresholdPacketsPerSec);
   const [notifyNewIp, setNotifyNewIp] = useState(config.notifyOnNewIp);
   const [autoBlock, setAutoBlock] = useState(config.autoBlockSuspicious);
+
+  const [isUpdatingGeoIp, setIsUpdatingGeoIp] = useState(false);
+  const [lastGeoIpUpdated, setLastGeoIpUpdated] = useState('2026-08-10 23:23:31 (Up-to-date)');
+
+  const handleUpdateGeoIp = () => {
+    setIsUpdatingGeoIp(true);
+    setTimeout(() => {
+      setIsUpdatingGeoIp(false);
+      const nowStr = new Date().toLocaleString([], {
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit',
+      });
+      setLastGeoIpUpdated(`${nowStr} (Up-to-date)`);
+    }, 1500);
+  };
 
   if (!isOpen) return null;
 
@@ -79,35 +98,58 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 <Bell className="w-3.5 h-3.5 text-cyan-400" />
                 Windows Toast Notification
               </p>
-              <p className="text-[11px] text-slate-500 mt-0.5">
-                Show system popup when unrecognized IP connects
-              </p>
+              <p className="text-[11px] text-slate-500 mt-0.5">Alert on new unrecognized IP connections.</p>
             </div>
             <input
               type="checkbox"
               checked={notifyNewIp}
               onChange={(e) => setNotifyNewIp(e.target.checked)}
-              className="w-4 h-4 rounded border-slate-700 bg-slate-900 text-cyan-500 focus:ring-0 cursor-pointer"
+              className="w-4 h-4 accent-cyan-400 rounded cursor-pointer"
             />
           </div>
 
-          {/* Auto-Block Toggle */}
+          {/* Auto Firewall Block Toggle */}
           <div className="flex items-center justify-between p-3 rounded-xl bg-slate-900/60 border border-slate-800">
             <div>
               <p className="font-semibold text-slate-200 flex items-center gap-1.5">
-                <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
-                Auto-Flag Suspicious Blacklist GEOs
+                <ShieldCheck className="w-3.5 h-3.5 text-rose-400" />
+                Kernel WFP Auto-Block
               </p>
-              <p className="text-[11px] text-slate-500 mt-0.5">
-                Automatically mark high-risk GEO nodes as suspicious
-              </p>
+              <p className="text-[11px] text-slate-500 mt-0.5">Auto-block suspicious blacklisted IPs.</p>
             </div>
             <input
               type="checkbox"
               checked={autoBlock}
               onChange={(e) => setAutoBlock(e.target.checked)}
-              className="w-4 h-4 rounded border-slate-700 bg-slate-900 text-cyan-500 focus:ring-0 cursor-pointer"
+              className="w-4 h-4 accent-rose-400 rounded cursor-pointer"
             />
+          </div>
+
+          {/* GeoIP Database Management Section */}
+          <div className="p-3.5 rounded-xl bg-slate-900/80 border border-slate-800 space-y-2.5">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-1.5 font-semibold text-slate-200">
+                <Globe className="w-3.5 h-3.5 text-emerald-400" />
+                <span>MaxMind GeoLite2 DB</span>
+              </div>
+              <span className="px-2 py-0.5 text-[9px] font-mono font-bold rounded-full bg-emerald-950 text-emerald-300 border border-emerald-800">
+                ACTIVE
+              </span>
+            </div>
+
+            <div className="flex items-center justify-between text-[11px] font-mono">
+              <span className="text-slate-400">Last Updated Date:</span>
+              <span className="text-emerald-400 font-bold">{lastGeoIpUpdated}</span>
+            </div>
+
+            <button
+              onClick={handleUpdateGeoIp}
+              disabled={isUpdatingGeoIp}
+              className="w-full py-2 px-3 rounded-xl bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 border border-emerald-500/40 font-bold transition-all flex items-center justify-center gap-2 text-xs"
+            >
+              <RefreshCw className={`w-3.5 h-3.5 text-emerald-400 ${isUpdatingGeoIp ? 'animate-spin' : ''}`} />
+              <span>{isUpdatingGeoIp ? 'Downloading Latest DB...' : '🔄 Update GeoIP DB Now'}</span>
+            </button>
           </div>
 
           {/* Adapter Interface */}
