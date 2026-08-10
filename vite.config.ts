@@ -50,12 +50,13 @@ function liveNetstatPlugin(): Plugin {
 
                 if (ip !== "127.0.0.1" && ip !== "0.0.0.0" && !ip.startsWith("[::")) {
                   if (!sessionsMap.has(ip)) {
+                    const geoInfo = resolveCountryInfo(ip);
                     sessionsMap.set(ip, {
                       id: `real-win-${ip.replace(/\./g, "-")}`,
                       ip,
                       domain: resolveDomain(ip),
-                      country: resolveCountry(ip),
-                      country_code: "NET",
+                      country: geoInfo.country,
+                      country_code: geoInfo.countryCode,
                       packets_in: Math.floor(Math.random() * 8) + 2,
                       packets_out: Math.floor(Math.random() * 5) + 1,
                       total_packets: 3,
@@ -139,12 +140,62 @@ function resolveDomain(ip: string): string | undefined {
   return undefined;
 }
 
-function resolveCountry(ip: string): string {
-  if (ip.startsWith("192.168.") || ip.startsWith("10.") || ip.startsWith("127.")) return "Local Network";
-  if (ip.startsWith("223.130.") || ip.startsWith("175.207.") || ip.startsWith("211.115.")) return "South Korea";
-  if (ip.startsWith("8.8.8.") || ip.startsWith("1.1.1.") || ip.startsWith("142.250.") || ip.startsWith("172.217.") || ip.startsWith("13.107.") || ip.startsWith("52.") || ip.startsWith("104.18.") || ip.startsWith("140.82.")) return "United States";
-  if (ip.startsWith("185.220.") || ip.startsWith("45.154.")) return "Russia";
-  return "Unknown Location";
+const geoCacheMap = new Map<string, { country: string; countryCode: string }>();
+
+function resolveCountryInfo(ip: string): { country: string; countryCode: string } {
+  if (ip.startsWith("192.168.") || ip.startsWith("10.") || ip.startsWith("127.")) {
+    return { country: "Local Network", countryCode: "LOC" };
+  }
+
+  if (geoCacheMap.has(ip)) {
+    return geoCacheMap.get(ip)!;
+  }
+
+  // Fallback Rule while async GeoIP lookup triggers in background
+  let fallbackCountry = "Unknown Location";
+  let fallbackCode = "UNK";
+
+  if (ip.startsWith("223.130.") || ip.startsWith("175.207.") || ip.startsWith("211.115.")) {
+    fallbackCountry = "South Korea";
+    fallbackCode = "KR";
+  } else if (ip.startsWith("8.8.8.") || ip.startsWith("1.1.1.") || ip.startsWith("142.250.") || ip.startsWith("172.217.") || ip.startsWith("13.107.") || ip.startsWith("52.") || ip.startsWith("104.18.") || ip.startsWith("140.82.")) {
+    fallbackCountry = "United States";
+    fallbackCode = "US";
+  } else if (ip.startsWith("185.220.") || ip.startsWith("45.154.")) {
+    fallbackCountry = "Russia";
+    fallbackCode = "RU";
+  }
+
+  // Trigger background non-blocking GeoIP lookup
+  fetchGeoIpBackground(ip);
+
+  return { country: fallbackCountry, countryCode: fallbackCode };
+}
+
+async function fetchGeoIpBackground(ip: string) {
+  if (geoCacheMap.has(ip) || ip.startsWith("192.168.") || ip.startsWith("10.") || ip.startsWith("127.")) return;
+
+  try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 1200);
+
+    const res = await fetch(`http://ip-api.com/json/${ip}?fields=status,country,countryCode`, {
+      signal: controller.signal,
+    });
+    clearTimeout(timeoutId);
+
+    if (res.ok) {
+      const data = await res.json();
+      if (data && data.status === 'success' && data.country) {
+        geoCacheMap.set(ip, {
+          country: data.country,
+          countryCode: data.countryCode || 'NET',
+        });
+      }
+    }
+  } catch (e) {
+    // Fail-safe fallback - app will never crash!
+  }
 }
 
 function isSuspicious(ip: string, port: number): boolean {

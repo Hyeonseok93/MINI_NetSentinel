@@ -390,37 +390,30 @@ export class RealPacketEngine {
   }
 
   public getGeoNodes(): import('../types/network').GeoNode[] {
-    const geoMap: Map<string, { count: number; bytes: number; code: string; lat: number; lng: number }> = new Map([
-      ['United States', { count: 0, bytes: 0, code: 'US', lat: 37.0902, lng: -95.7129 }],
-      ['Japan', { count: 0, bytes: 0, code: 'JP', lat: 36.2048, lng: 138.2529 }],
-      ['Germany', { count: 0, bytes: 0, code: 'DE', lat: 51.1657, lng: 10.4515 }],
-      ['Singapore', { count: 0, bytes: 0, code: 'SG', lat: 1.3521, lng: 103.8198 }],
-      ['South Korea', { count: 0, bytes: 0, code: 'KR', lat: 35.9078, lng: 127.7669 }],
-      ['Unknown Location', { count: 0, bytes: 0, code: 'UNK', lat: 0, lng: 0 }],
-    ]);
+    const geoMap = new Map<string, { count: number; bytes: number; code: string; lat: number; lng: number }>();
 
     this.sessions.forEach((sess) => {
       const c = sess.country || 'Unknown Location';
-      const existing = geoMap.get(c) || { count: 0, bytes: 0, code: 'UNK', lat: 0, lng: 0 };
+      const code = sess.countryCode || (c === 'South Korea' ? 'KR' : c === 'United States' ? 'US' : 'NET');
+      const existing = geoMap.get(c) || { count: 0, bytes: 0, code, lat: 0, lng: 0 };
       existing.count += 1;
       existing.bytes += sess.totalBytes;
+      if (code && code !== 'NET') existing.code = code;
       geoMap.set(c, existing);
     });
 
     const result: import('../types/network').GeoNode[] = [];
     geoMap.forEach((val, country) => {
-      if (val.count > 0 || country === 'United States' || country === 'South Korea') {
-        result.push({
-          country,
-          countryCode: val.code,
-          activeIpCount: val.count,
-          totalBytes: val.bytes,
-          lat: val.lat,
-          lng: val.lng,
-        });
-      }
+      result.push({
+        country,
+        countryCode: val.code || 'NET',
+        activeIpCount: val.count,
+        totalBytes: val.bytes,
+        lat: val.lat,
+        lng: val.lng,
+      });
     });
-    return result;
+    return result.sort((a, b) => b.activeIpCount - a.activeIpCount);
   }
 
   public subscribe(fn: () => void) {
