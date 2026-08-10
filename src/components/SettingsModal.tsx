@@ -175,16 +175,16 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
         {/* Footer with High-Visibility High-Contrast Save Button */}
         <div className="p-4 border-t border-slate-800 bg-slate-900/90 flex justify-end items-center gap-3">
           <button
-            onClick={onClose}
-            className="px-4 py-2 rounded-xl text-xs font-semibold text-slate-300 hover:text-white bg-slate-800/80 hover:bg-slate-700 transition-all border border-slate-700"
-          >
-            Cancel
-          </button>
-          <button
             onClick={handleSave}
             className="px-5 py-2 rounded-xl text-xs font-extrabold bg-cyan-400 hover:bg-cyan-300 text-slate-950 transition-all shadow-[0_0_15px_rgba(34,211,238,0.8)] border border-cyan-300 cursor-pointer"
           >
             Save Configuration
+          </button>
+          <button
+            onClick={onClose}
+            className="px-4 py-2 rounded-xl text-xs font-semibold text-slate-300 hover:text-white bg-slate-800/80 hover:bg-slate-700 transition-all border border-slate-700"
+          >
+            Cancel
           </button>
         </div>
       </div>
