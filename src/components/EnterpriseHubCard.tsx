@@ -26,6 +26,8 @@ import {
   TrendingUp,
   Trash2,
   HelpCircle,
+  ChevronDown,
+  ChevronUp,
 } from 'lucide-react';
 
 interface EnterpriseHubCardProps {
@@ -70,6 +72,16 @@ export type GeoSortOptionKey =
   | 'bytes-asc'
   | 'country-asc';
 
+export interface GroupedProcess {
+  processName: string;
+  totalBytes: number;
+  totalPackets: number;
+  packetsIn: number;
+  packetsOut: number;
+  iconType: ProcessTrafficPoint['iconType'];
+  pids: ProcessTrafficPoint[];
+}
+
 export const EnterpriseHubCard: React.FC<EnterpriseHubCardProps> = ({
   sessions,
   processes,
@@ -96,11 +108,24 @@ export const EnterpriseHubCard: React.FC<EnterpriseHubCardProps> = ({
   const [appSubTab, setAppSubTab] = useState<'live' | 'cumulative'>('cumulative');
   const [appSearchTerm, setAppSearchTerm] = useState('');
   const [appSortOption, setAppSortOption] = useState<AppSortOptionKey>('bytes-desc');
+  const [expandedApps, setExpandedApps] = useState<Set<string>>(new Set());
 
   // Geo Threat Map Sub-Tab, Search & Sort State
   const [geoSubTab, setGeoSubTab] = useState<'live' | 'cumulative'>('live');
   const [geoSearchTerm, setGeoSearchTerm] = useState('');
   const [geoSortOption, setGeoSortOption] = useState<GeoSortOptionKey>('ips-desc');
+
+  const toggleAppExpand = (appName: string) => {
+    setExpandedApps((prev) => {
+      const next = new Set(prev);
+      if (next.has(appName)) {
+        next.delete(appName);
+      } else {
+        next.add(appName);
+      }
+      return next;
+    });
+  };
 
   const formatBytes = (bytes: number) => {
     if (bytes < 1024) return `${bytes} B`;
@@ -147,33 +172,65 @@ export const EnterpriseHubCard: React.FC<EnterpriseHubCardProps> = ({
       }
     });
 
+  const liveAppNames = new Set(processes.map((p) => p.processName));
+  const cumulativeAppNames = new Set(cumulativeProcesses.map((p) => p.processName));
+
   const targetProcesses = appSubTab === 'cumulative' ? (cumulativeProcesses.length > 0 ? cumulativeProcesses : processes) : processes;
 
-  const filteredProcesses = targetProcesses
-    .filter((p) => {
-      return (
-        p.processName.toLowerCase().includes(appSearchTerm.toLowerCase()) ||
-        p.pid.toString().includes(appSearchTerm)
-      );
-    })
-    .sort((a, b) => {
-      switch (appSortOption) {
-        case 'bytes-desc':
-          return b.bytesTotal - a.bytesTotal;
-        case 'bytes-asc':
-          return a.bytesTotal - b.bytesTotal;
-        case 'packets-desc':
-          return b.totalPackets - a.totalPackets;
-        case 'name-asc':
-          return a.processName.localeCompare(b.processName);
-        case 'pid-asc':
-          return a.pid - b.pid;
-        default:
-          return b.bytesTotal - a.bytesTotal;
-      }
-    });
+  // Process Aggregation by App Name (Grouped)
+  const groupedAppMap = new Map<string, GroupedProcess>();
 
-  const maxProcessBytes = Math.max(...processes.map((p) => (appSubTab === 'live' ? Math.floor(p.bytesTotal / 10) : p.bytesTotal)), 1);
+  targetProcesses.forEach((proc) => {
+    if (
+      appSearchTerm &&
+      !proc.processName.toLowerCase().includes(appSearchTerm.toLowerCase()) &&
+      !proc.pid.toString().includes(appSearchTerm)
+    ) {
+      return;
+    }
+
+    if (!groupedAppMap.has(proc.processName)) {
+      groupedAppMap.set(proc.processName, {
+        processName: proc.processName,
+        totalBytes: proc.bytesTotal,
+        totalPackets: proc.totalPackets,
+        packetsIn: proc.packetsIn,
+        packetsOut: proc.packetsOut,
+        iconType: proc.iconType,
+        pids: [{ ...proc }],
+      });
+    } else {
+      const existing = groupedAppMap.get(proc.processName)!;
+      existing.totalBytes += proc.bytesTotal;
+      existing.totalPackets += proc.totalPackets;
+      existing.packetsIn += proc.packetsIn;
+      existing.packetsOut += proc.packetsOut;
+
+      // Add unique PID
+      if (!existing.pids.some((p) => p.pid === proc.pid)) {
+        existing.pids.push({ ...proc });
+      }
+    }
+  });
+
+  const groupedProcesses = Array.from(groupedAppMap.values()).sort((a, b) => {
+    switch (appSortOption) {
+      case 'bytes-desc':
+        return b.totalBytes - a.totalBytes;
+      case 'bytes-asc':
+        return a.totalBytes - b.totalBytes;
+      case 'packets-desc':
+        return b.totalPackets - a.totalPackets;
+      case 'name-asc':
+        return a.processName.localeCompare(b.processName);
+      case 'pid-asc':
+        return b.pids.length - a.pids.length;
+      default:
+        return b.totalBytes - a.totalBytes;
+    }
+  });
+
+  const maxAppBytes = Math.max(...groupedProcesses.map((g) => (appSubTab === 'live' ? Math.floor(g.totalBytes / 10) : g.totalBytes)), 1);
 
   // Geo Nodes Filtering & Sorting
   const targetGeoNodes = geoSubTab === 'cumulative' ? (cumulativeGeoNodes.length > 0 ? cumulativeGeoNodes : geoNodes) : geoNodes;
@@ -256,7 +313,7 @@ export const EnterpriseHubCard: React.FC<EnterpriseHubCardProps> = ({
             <Cpu className="w-4 h-4 text-purple-400 shrink-0" />
             <span className="truncate">App Breakdown</span>
             <span className="px-2 py-0.5 text-[10px] bg-slate-800 rounded-full text-purple-300 font-mono">
-              {processes.length}
+              {groupedProcesses.length}
             </span>
           </button>
 
@@ -393,7 +450,7 @@ export const EnterpriseHubCard: React.FC<EnterpriseHubCardProps> = ({
                 <Zap className="w-3.5 h-3.5 text-purple-400 animate-pulse shrink-0" />
                 <span>Live Real-time</span>
                 <span className="px-1.5 py-0.2 text-[10px] bg-slate-900 rounded-full text-purple-300 font-mono border border-purple-500/30">
-                  {processes.length}
+                  {liveAppNames.size}
                 </span>
               </button>
 
@@ -408,7 +465,7 @@ export const EnterpriseHubCard: React.FC<EnterpriseHubCardProps> = ({
                 <TrendingUp className="w-3.5 h-3.5 text-cyan-400 shrink-0" />
                 <span>Cumulative Total</span>
                 <span className="px-1.5 py-0.2 text-[10px] bg-slate-900 rounded-full text-cyan-300 font-mono border border-cyan-500/30">
-                  {cumulativeProcesses.length > 0 ? cumulativeProcesses.length : processes.length}
+                  {Math.max(cumulativeAppNames.size, liveAppNames.size)}
                 </span>
               </button>
             </div>
@@ -439,7 +496,7 @@ export const EnterpriseHubCard: React.FC<EnterpriseHubCardProps> = ({
                   <option value="bytes-asc" className="bg-slate-900 text-slate-200">Bandwidth (Lowest First)</option>
                   <option value="packets-desc" className="bg-slate-900 text-slate-200">Packets (Highest First)</option>
                   <option value="name-asc" className="bg-slate-900 text-slate-200">Process Name (A-Z)</option>
-                  <option value="pid-asc" className="bg-slate-900 text-slate-200">Process PID (Low to High)</option>
+                  <option value="pid-asc" className="bg-slate-900 text-slate-200">Most Active PIDs</option>
                 </select>
               </div>
 
@@ -739,29 +796,49 @@ export const EnterpriseHubCard: React.FC<EnterpriseHubCardProps> = ({
           </div>
         )}
 
-        {/* TAB 2: App Breakdown Full View (Stable Scroll without Jumping) */}
+        {/* TAB 2: App Breakdown Full View (Grouped with Expandable PID Breakdown) */}
         {activeTab === 'apps' && (
           <div className="p-6 space-y-4">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {filteredProcesses.length === 0 ? (
+              {groupedProcesses.length === 0 ? (
                 <div className="col-span-2 py-12 text-center text-slate-500 font-mono">
                   No Windows app processes match the search criteria.
                 </div>
               ) : (
-                filteredProcesses.map((proc) => {
-                  const currentDisplayBytes = appSubTab === 'live' ? Math.floor(proc.bytesTotal / 10) : proc.bytesTotal;
-                  const percent = Math.min(Math.round((currentDisplayBytes / maxProcessBytes) * 100), 100);
+                groupedProcesses.map((app) => {
+                  const isExpanded = expandedApps.has(app.processName);
+                  const currentDisplayBytes = appSubTab === 'live' ? Math.floor(app.totalBytes / 10) : app.totalBytes;
+                  const percent = Math.min(Math.round((currentDisplayBytes / maxAppBytes) * 100), 100);
 
                   return (
-                    <div key={proc.processName} className="p-4 rounded-xl bg-slate-900/60 border border-slate-800/80 space-y-2 hover:border-purple-500/40 transition-all">
-                      <div className="flex items-center justify-between text-xs font-mono">
+                    <div
+                      key={app.processName}
+                      className={`p-4 rounded-xl bg-slate-900/60 border transition-all space-y-3 ${
+                        isExpanded ? 'border-purple-500/60 bg-slate-900/90 shadow-lg' : 'border-slate-800/80 hover:border-purple-500/40'
+                      }`}
+                    >
+                      {/* Main Grouped Header */}
+                      <div
+                        onClick={() => toggleAppExpand(app.processName)}
+                        className="flex items-center justify-between text-xs font-mono cursor-pointer select-none group"
+                      >
                         <div className="flex items-center gap-2.5">
-                          <div className="p-2 rounded-xl bg-slate-950 border border-slate-800">
-                            {renderProcIcon(proc.iconType)}
+                          <div className="p-2 rounded-xl bg-slate-950 border border-slate-800 group-hover:border-purple-500/50 transition-all">
+                            {renderProcIcon(app.iconType)}
                           </div>
                           <div>
-                            <h4 className="font-bold text-sm text-slate-100">{proc.processName}</h4>
-                            <span className="text-[10px] text-slate-400 font-mono">PID: {proc.pid}</span>
+                            <div className="flex items-center gap-2">
+                              <h4 className="font-bold text-sm text-slate-100 group-hover:text-purple-300 transition-colors">
+                                {app.processName}
+                              </h4>
+                              <span className="px-2 py-0.5 text-[10px] font-bold rounded-full bg-purple-950 text-purple-300 border border-purple-800/80">
+                                {app.pids.length} {app.pids.length === 1 ? 'PID' : 'PIDs'}
+                              </span>
+                            </div>
+                            <span className="text-[10px] text-slate-400 font-mono flex items-center gap-1 mt-0.5">
+                              <span>Click to {isExpanded ? 'collapse' : 'expand PIDs list'}</span>
+                              {isExpanded ? <ChevronUp className="w-3 h-3 text-purple-400" /> : <ChevronDown className="w-3 h-3 text-slate-500" />}
+                            </span>
                           </div>
                         </div>
 
@@ -772,12 +849,13 @@ export const EnterpriseHubCard: React.FC<EnterpriseHubCardProps> = ({
                           </span>
                           <div className="text-[10px] text-slate-500 font-mono">
                             {appSubTab === 'live'
-                              ? `${Math.floor(proc.packetsIn / 5)} ↓ / ${Math.floor(proc.packetsOut / 5)} ↑ pkts/s`
-                              : `${proc.packetsIn.toLocaleString()} ↓ / ${proc.packetsOut.toLocaleString()} ↑ pkts`}
+                              ? `${Math.floor(app.packetsIn / 5)} ↓ / ${Math.floor(app.packetsOut / 5)} ↑ pkts/s`
+                              : `${app.packetsIn.toLocaleString()} ↓ / ${app.packetsOut.toLocaleString()} ↑ pkts`}
                           </div>
                         </div>
                       </div>
 
+                      {/* Main Group Progress Bar */}
                       <div className="h-2 w-full bg-slate-950 rounded-full overflow-hidden border border-slate-800/80">
                         <div
                           className={`h-full rounded-full transition-all duration-500 ${
@@ -788,6 +866,41 @@ export const EnterpriseHubCard: React.FC<EnterpriseHubCardProps> = ({
                           style={{ width: `${percent}%` }}
                         />
                       </div>
+
+                      {/* Expandable Accordion: All Child PIDs List */}
+                      {isExpanded && (
+                        <div className="pt-2 border-t border-slate-800/80 space-y-2 animate-fadeIn">
+                          <div className="flex items-center justify-between text-[11px] font-semibold text-slate-400 pb-1">
+                            <span>Detailed Sub-Processes List ({app.pids.length})</span>
+                            <span className="text-[10px] font-mono text-purple-300">Live Telemetry</span>
+                          </div>
+                          <div className="max-h-48 overflow-y-auto custom-scrollbar space-y-1.5 pr-1">
+                            {app.pids.map((subProc) => {
+                              const subBytes = appSubTab === 'live' ? Math.floor(subProc.bytesTotal / 10) : subProc.bytesTotal;
+
+                              return (
+                                <div
+                                  key={subProc.pid}
+                                  className="flex items-center justify-between p-2 rounded-lg bg-slate-950/80 border border-slate-800 text-xs font-mono"
+                                >
+                                  <div className="flex items-center gap-2">
+                                    <span className="px-1.5 py-0.5 rounded bg-slate-900 text-purple-300 border border-slate-800 font-bold text-[10px]">
+                                      PID: {subProc.pid}
+                                    </span>
+                                    <span className="text-slate-300 truncate max-w-[140px] sm:max-w-xs">{app.processName}</span>
+                                  </div>
+                                  <div className="text-right">
+                                    <span className="font-bold text-slate-200 text-[11px]">{formatBytes(subBytes)}</span>
+                                    <span className="text-slate-500 text-[10px] ml-1.5">
+                                      ({subProc.packetsIn} ↓ / {subProc.packetsOut} ↑)
+                                    </span>
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      )}
                     </div>
                   );
                 })

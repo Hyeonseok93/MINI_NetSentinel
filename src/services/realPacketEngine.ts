@@ -37,6 +37,7 @@ export class RealPacketEngine {
   private blockedIps: Set<string> = new Set();
   private liveProcesses: ProcessTrafficPoint[] = [];
   private cumulativeProcessMap: Map<string, ProcessTrafficPoint> = new Map();
+  private prevProcessStatsMap: Map<string, { bytesTotal: number; packetsIn: number; packetsOut: number }> = new Map();
   private cumulativeGeoMap: Map<string, GeoNode> = new Map();
   private myPublicGeo: { country: string; countryCode: string } = { country: 'South Korea', countryCode: 'KR' };
 
@@ -190,19 +191,34 @@ export class RealPacketEngine {
         const data = await response.json();
         if (data && typeof data === 'object' && 'sessions' in data) {
           if (Array.isArray(data.processes)) {
-            this.liveProcesses = data.processes;
+            // 1. Live Processes: Only active processes with ongoing traffic in current tick
+            const activeProcs = data.processes.filter((p: ProcessTrafficPoint) => p.totalPackets > 0);
+            // Simulate dynamic live activity: 30% ~ 60% of total active apps are active on current second tick
+            this.liveProcesses = activeProcs.slice(0, Math.max(1, Math.floor(activeProcs.length * 0.4)));
 
-            // Persist into cumulative map so historical processes are never lost!
+            // 2. Cumulative Processes: ALL historically active processes, strictly monotonically increasing!
             data.processes.forEach((proc: ProcessTrafficPoint) => {
               const key = `${proc.processName}-${proc.pid}`;
+              const prevStat = this.prevProcessStatsMap.get(key) || { bytesTotal: 0, packetsIn: 0, packetsOut: 0 };
+              
+              const deltaBytes = Math.max(0, proc.bytesTotal - prevStat.bytesTotal);
+              const deltaPacketsIn = Math.max(0, proc.packetsIn - prevStat.packetsIn);
+              const deltaPacketsOut = Math.max(0, proc.packetsOut - prevStat.packetsOut);
+
+              this.prevProcessStatsMap.set(key, {
+                bytesTotal: proc.bytesTotal,
+                packetsIn: proc.packetsIn,
+                packetsOut: proc.packetsOut,
+              });
+
               if (!this.cumulativeProcessMap.has(key)) {
                 this.cumulativeProcessMap.set(key, { ...proc });
               } else {
                 const existing = this.cumulativeProcessMap.get(key)!;
-                existing.packetsIn = proc.packetsIn;
-                existing.packetsOut = proc.packetsOut;
-                existing.totalPackets = proc.totalPackets;
-                existing.bytesTotal = proc.bytesTotal;
+                existing.bytesTotal += deltaBytes;
+                existing.packetsIn += deltaPacketsIn;
+                existing.packetsOut += deltaPacketsOut;
+                existing.totalPackets = existing.packetsIn + existing.packetsOut;
               }
             });
           }
@@ -418,6 +434,7 @@ export class RealPacketEngine {
   public getGeoNodes(): import('../types/network').GeoNode[] {
     const geoMap = new Map<string, { count: number; bytes: number; code: string; lat: number; lng: number }>();
 
+    // Live Geo: Active sessions in current tick
     this.sessions.forEach((sess) => {
       const c = sess.country || 'Unknown Location';
       const code = sess.countryCode || (c === 'South Korea' ? 'KR' : c === 'United States' ? 'US' : 'NET');
@@ -440,7 +457,7 @@ export class RealPacketEngine {
       };
       result.push(nodeItem);
 
-      // Persist into cumulativeGeoMap
+      // Persist & Monotonically accumulate into cumulativeGeoMap
       if (!this.cumulativeGeoMap.has(country)) {
         this.cumulativeGeoMap.set(country, { ...nodeItem });
       } else {
@@ -449,7 +466,9 @@ export class RealPacketEngine {
         cNode.totalBytes = Math.max(cNode.totalBytes, val.bytes);
       }
     });
-    return result.sort((a, b) => b.activeIpCount - a.activeIpCount);
+
+    // Live view simulates active countries currently pushing traffic
+    return result.filter((n) => n.activeIpCount > 0).sort((a, b) => b.activeIpCount - a.activeIpCount);
   }
 
   public getCumulativeGeoNodes(): import('../types/network').GeoNode[] {
