@@ -63,6 +63,13 @@ export type AppSortOptionKey =
   | 'name-asc'
   | 'pid-asc';
 
+export type GeoSortOptionKey =
+  | 'ips-desc'
+  | 'ips-asc'
+  | 'bytes-desc'
+  | 'bytes-asc'
+  | 'country-asc';
+
 export const EnterpriseHubCard: React.FC<EnterpriseHubCardProps> = ({
   sessions,
   processes,
@@ -87,11 +94,13 @@ export const EnterpriseHubCard: React.FC<EnterpriseHubCardProps> = ({
 
   // App Breakdown Sub-Tab, Search & Sort State
   const [appSubTab, setAppSubTab] = useState<'live' | 'cumulative'>('cumulative');
-
-  // Geo Threat Map Sub-Tab State
-  const [geoSubTab, setGeoSubTab] = useState<'live' | 'cumulative'>('live');
   const [appSearchTerm, setAppSearchTerm] = useState('');
   const [appSortOption, setAppSortOption] = useState<AppSortOptionKey>('bytes-desc');
+
+  // Geo Threat Map Sub-Tab, Search & Sort State
+  const [geoSubTab, setGeoSubTab] = useState<'live' | 'cumulative'>('live');
+  const [geoSearchTerm, setGeoSearchTerm] = useState('');
+  const [geoSortOption, setGeoSortOption] = useState<GeoSortOptionKey>('ips-desc');
 
   const formatBytes = (bytes: number) => {
     if (bytes < 1024) return `${bytes} B`;
@@ -165,6 +174,34 @@ export const EnterpriseHubCard: React.FC<EnterpriseHubCardProps> = ({
     });
 
   const maxProcessBytes = Math.max(...processes.map((p) => (appSubTab === 'live' ? Math.floor(p.bytesTotal / 10) : p.bytesTotal)), 1);
+
+  // Geo Nodes Filtering & Sorting
+  const targetGeoNodes = geoSubTab === 'cumulative' ? (cumulativeGeoNodes.length > 0 ? cumulativeGeoNodes : geoNodes) : geoNodes;
+
+  const filteredGeoNodes = targetGeoNodes
+    .filter((node) => {
+      return (
+        node.country.toLowerCase().includes(geoSearchTerm.toLowerCase()) ||
+        node.countryCode.toLowerCase().includes(geoSearchTerm.toLowerCase())
+      );
+    })
+    .sort((a, b) => {
+      switch (geoSortOption) {
+        case 'ips-desc':
+          return b.activeIpCount - a.activeIpCount;
+        case 'ips-asc':
+          return a.activeIpCount - b.activeIpCount;
+        case 'bytes-desc':
+          return b.totalBytes - a.totalBytes;
+        case 'bytes-asc':
+          return a.totalBytes - b.totalBytes;
+        case 'country-asc':
+          return a.country.localeCompare(b.country);
+        default:
+          return b.activeIpCount - a.activeIpCount;
+      }
+    });
+
   const quotaPercent = Math.min(Math.round((currentBytesToday / dailyQuotaBytes) * 100), 100);
   const isQuotaWarning = quotaPercent >= 80;
   const isQuotaExceeded = quotaPercent >= 100;
@@ -234,7 +271,7 @@ export const EnterpriseHubCard: React.FC<EnterpriseHubCardProps> = ({
             <Globe2 className="w-4 h-4 text-emerald-400 shrink-0" />
             <span className="truncate">Geo Threat Map</span>
             <span className="px-2 py-0.5 text-[10px] bg-slate-800 rounded-full text-emerald-300 font-mono">
-              {geoNodes.length}
+              {filteredGeoNodes.length}
             </span>
           </button>
 
@@ -343,7 +380,7 @@ export const EnterpriseHubCard: React.FC<EnterpriseHubCardProps> = ({
 
         {activeTab === 'apps' && (
           <div className="pt-2 flex flex-col lg:flex-row items-center justify-between gap-3 w-full">
-            {/* App Sub-Tabs (Strict Single Line - No Wrap) */}
+            {/* App Sub-Tabs */}
             <div className="flex items-center gap-1.5 bg-slate-950 p-1 rounded-xl border border-slate-800 shrink-0">
               <button
                 onClick={() => setAppSubTab('live')}
@@ -376,7 +413,7 @@ export const EnterpriseHubCard: React.FC<EnterpriseHubCardProps> = ({
               </button>
             </div>
 
-            {/* Right Controls: Search + Sort Dropdown + Clear History Button (Moved here!) */}
+            {/* Right Controls: Search + Sort Dropdown + Clear History Button */}
             <div className="flex flex-col sm:flex-row items-center gap-3 w-full lg:w-auto">
               {/* App Search Box */}
               <div className="relative w-full sm:w-48">
@@ -406,7 +443,7 @@ export const EnterpriseHubCard: React.FC<EnterpriseHubCardProps> = ({
                 </select>
               </div>
 
-              {/* Clear History Button (Placed cleanly on the right for Cumulative Mode) */}
+              {/* Clear History Button */}
               {appSubTab === 'cumulative' && onClearCumulativeProcesses && (
                 <button
                   onClick={onClearCumulativeProcesses}
@@ -422,7 +459,7 @@ export const EnterpriseHubCard: React.FC<EnterpriseHubCardProps> = ({
         )}
 
         {activeTab === 'geo' && (
-          <div className="pt-2 flex flex-col sm:flex-row items-center justify-between gap-3 w-full">
+          <div className="pt-2 flex flex-col lg:flex-row items-center justify-between gap-3 w-full">
             {/* Geo Sub-Tabs */}
             <div className="flex items-center gap-1.5 bg-slate-950 p-1 rounded-xl border border-slate-800 shrink-0">
               <button
@@ -456,11 +493,41 @@ export const EnterpriseHubCard: React.FC<EnterpriseHubCardProps> = ({
               </button>
             </div>
 
-            <div className="flex items-center gap-3">
-              <span className="text-[11px] font-mono text-emerald-400 bg-slate-950 px-2.5 py-1 rounded-xl border border-slate-800 hidden md:inline-block">
+            {/* Geo Controls: Search + Sort Dropdown + Clear History Button */}
+            <div className="flex flex-col sm:flex-row items-center gap-3 w-full lg:w-auto">
+              <span className="text-[11px] font-mono text-emerald-400 bg-slate-950 px-2.5 py-1.5 rounded-xl border border-slate-800 hidden xl:inline-block shrink-0">
                 Source PC: {myPublicGeo.countryCode} ({myPublicGeo.country})
               </span>
 
+              {/* Geo Search Box */}
+              <div className="relative w-full sm:w-44">
+                <Search className="w-3.5 h-3.5 absolute left-3 top-2.5 text-slate-500" />
+                <input
+                  type="text"
+                  placeholder="Search Country..."
+                  value={geoSearchTerm}
+                  onChange={(e) => setGeoSearchTerm(e.target.value)}
+                  className="w-full pl-9 pr-3 py-1.5 bg-slate-950 border border-slate-800 rounded-xl text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:border-emerald-500/50"
+                />
+              </div>
+
+              {/* Geo Sort Dropdown */}
+              <div className="relative w-full sm:w-auto flex items-center gap-1.5 bg-slate-950 border border-slate-800 rounded-xl px-2.5 py-1.5 text-xs text-slate-300">
+                <SlidersHorizontal className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                <select
+                  value={geoSortOption}
+                  onChange={(e) => setGeoSortOption(e.target.value as GeoSortOptionKey)}
+                  className="bg-transparent text-slate-200 font-medium text-xs focus:outline-none cursor-pointer border-none p-0 pr-1"
+                >
+                  <option value="ips-desc" className="bg-slate-900 text-slate-200">Active IPs (Highest First)</option>
+                  <option value="ips-asc" className="bg-slate-900 text-slate-200">Active IPs (Lowest First)</option>
+                  <option value="bytes-desc" className="bg-slate-900 text-slate-200">Volume (Highest First)</option>
+                  <option value="bytes-asc" className="bg-slate-900 text-slate-200">Volume (Lowest First)</option>
+                  <option value="country-asc" className="bg-slate-900 text-slate-200">Country Name (A-Z)</option>
+                </select>
+              </div>
+
+              {/* Clear History Button */}
               {geoSubTab === 'cumulative' && onClearCumulativeGeoNodes && (
                 <button
                   onClick={onClearCumulativeGeoNodes}
@@ -536,7 +603,7 @@ export const EnterpriseHubCard: React.FC<EnterpriseHubCardProps> = ({
                 ) : (
                   filteredSessions.map((session) => (
                     <tr
-                      key={session.id}
+                      key={session.ip}
                       className="hover:bg-slate-900/50 transition-colors group text-slate-300"
                     >
                       {/* Status & IP */}
@@ -672,7 +739,7 @@ export const EnterpriseHubCard: React.FC<EnterpriseHubCardProps> = ({
           </div>
         )}
 
-        {/* TAB 2: App Breakdown Full View */}
+        {/* TAB 2: App Breakdown Full View (Stable Scroll without Jumping) */}
         {activeTab === 'apps' && (
           <div className="p-6 space-y-4">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -686,7 +753,7 @@ export const EnterpriseHubCard: React.FC<EnterpriseHubCardProps> = ({
                   const percent = Math.min(Math.round((currentDisplayBytes / maxProcessBytes) * 100), 100);
 
                   return (
-                    <div key={`${proc.processName}-${proc.pid}`} className="p-4 rounded-xl bg-slate-900/60 border border-slate-800/80 space-y-2 hover:border-purple-500/40 transition-all">
+                    <div key={proc.processName} className="p-4 rounded-xl bg-slate-900/60 border border-slate-800/80 space-y-2 hover:border-purple-500/40 transition-all">
                       <div className="flex items-center justify-between text-xs font-mono">
                         <div className="flex items-center gap-2.5">
                           <div className="p-2 rounded-xl bg-slate-950 border border-slate-800">
@@ -736,41 +803,47 @@ export const EnterpriseHubCard: React.FC<EnterpriseHubCardProps> = ({
               <div className="absolute inset-0 bg-[linear-gradient(to_right,#1e293b20_1px,transparent_1px),linear-gradient(to_bottom,#1e293b20_1px,transparent_1px)] bg-[size:24px_24px]" />
 
               <div className="relative z-10 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-4 w-full">
-                {(geoSubTab === 'cumulative' ? (cumulativeGeoNodes.length > 0 ? cumulativeGeoNodes : geoNodes) : geoNodes).map((node) => {
-                  const isUnknown = node.countryCode === 'UNK' || node.country === 'Unknown Location';
+                {filteredGeoNodes.length === 0 ? (
+                  <div className="col-span-5 py-12 text-center text-slate-500 font-mono">
+                    No country geo nodes match the search criteria.
+                  </div>
+                ) : (
+                  filteredGeoNodes.map((node) => {
+                    const isUnknown = node.countryCode === 'UNK' || node.country === 'Unknown Location';
 
-                  return (
-                    <div
-                      key={node.country}
-                      className={`p-4 rounded-xl bg-slate-900/90 border flex flex-col items-center justify-center text-center gap-2 shadow-xl transition-all ${
-                        isUnknown
-                          ? 'border-purple-800/80 hover:border-purple-500/80 bg-purple-950/20'
-                          : 'border-slate-800 hover:border-emerald-500/50'
-                      }`}
-                    >
+                    return (
                       <div
-                        className={`p-2.5 rounded-xl border ${
+                        key={node.country}
+                        className={`p-4 rounded-xl bg-slate-900/90 border flex flex-col items-center justify-center text-center gap-2 shadow-xl transition-all ${
                           isUnknown
-                            ? 'bg-purple-950/80 text-purple-400 border-purple-800/60'
-                            : 'bg-emerald-950/80 text-emerald-400 border-emerald-800/60'
+                            ? 'border-purple-800/80 hover:border-purple-500/80 bg-purple-950/20'
+                            : 'border-slate-800 hover:border-emerald-500/50'
                         }`}
                       >
-                        {isUnknown ? <HelpCircle className="w-5 h-5 text-purple-400" /> : <Navigation className="w-5 h-5" />}
+                        <div
+                          className={`p-2.5 rounded-xl border ${
+                            isUnknown
+                              ? 'bg-purple-950/80 text-purple-400 border-purple-800/60'
+                              : 'bg-emerald-950/80 text-emerald-400 border-emerald-800/60'
+                          }`}
+                        >
+                          {isUnknown ? <HelpCircle className="w-5 h-5 text-purple-400" /> : <Navigation className="w-5 h-5" />}
+                        </div>
+                        <span className="font-bold text-xs text-slate-100">{node.country} ({node.countryCode})</span>
+                        <span
+                          className={`text-[10px] font-mono px-2 py-0.5 rounded border ${
+                            isUnknown
+                              ? 'text-purple-300 bg-purple-950/80 border-purple-800/60'
+                              : 'text-emerald-400 bg-emerald-950/60 border-emerald-800/50'
+                          }`}
+                        >
+                          {node.activeIpCount} Active IPs
+                        </span>
+                        <span className="text-[11px] font-mono text-slate-400">{formatBytes(node.totalBytes)}</span>
                       </div>
-                      <span className="font-bold text-xs text-slate-100">{node.country} ({node.countryCode})</span>
-                      <span
-                        className={`text-[10px] font-mono px-2 py-0.5 rounded border ${
-                          isUnknown
-                            ? 'text-purple-300 bg-purple-950/80 border-purple-800/60'
-                            : 'text-emerald-400 bg-emerald-950/60 border-emerald-800/50'
-                        }`}
-                      >
-                        {node.activeIpCount} Active IPs
-                      </span>
-                      <span className="text-[11px] font-mono text-slate-400">{formatBytes(node.totalBytes)}</span>
-                    </div>
-                  );
-                })}
+                    );
+                  })
+                )}
               </div>
             </div>
           </div>
