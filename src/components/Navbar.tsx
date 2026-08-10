@@ -7,7 +7,7 @@ interface NavbarProps {
   onOpenSettings: () => void;
   onOpenTrustedHub: () => void;
   unresolvedAnomaliesCount: number;
-  trustedCount: number;
+  trustedCount?: number;
 }
 
 export const Navbar: React.FC<NavbarProps> = ({
@@ -16,7 +16,6 @@ export const Navbar: React.FC<NavbarProps> = ({
   onOpenSettings,
   onOpenTrustedHub,
   unresolvedAnomaliesCount,
-  trustedCount,
 }) => {
   return (
     <header className="glass-panel border-b border-slate-800/80 sticky top-0 z-40">
@@ -68,7 +67,7 @@ export const Navbar: React.FC<NavbarProps> = ({
           title="Notification & Trusted Whitelist Hub"
         >
           <Bell className="w-4 h-4 text-emerald-400" />
-          <span className="hidden sm:inline">Whitelist ({trustedCount})</span>
+          <span className="hidden sm:inline">Whitelist</span>
           {unresolvedAnomaliesCount > 0 && (
             <span className="absolute -top-1 -right-1 flex h-4 w-4 items-center justify-center text-[10px] font-bold bg-rose-500 text-white rounded-full">
               {unresolvedAnomaliesCount}
