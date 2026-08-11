@@ -185,7 +185,7 @@ async function fetchGeoIpBackground(ip: string) {
     clearTimeout(timeoutId);
 
     if (res.ok) {
-      const data = await res.json();
+      const data = (await res.json()) as { status?: string; country?: string; countryCode?: string };
       if (data && data.status === 'success' && data.country) {
         geoCacheMap.set(ip, {
           country: data.country,
