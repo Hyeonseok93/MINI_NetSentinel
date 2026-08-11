@@ -19,7 +19,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   const [notifyNewIp, setNotifyNewIp] = useState(config.notifyOnNewIp);
   const [autoBlock, setAutoBlock] = useState(config.autoBlockSuspicious);
   const [dailyQuotaValue, setDailyQuotaValue] = useState(config.dailyQuotaValue || 10);
-  const [dailyQuotaUnit, setDailyQuotaUnit] = useState<'B' | 'KB' | 'MB' | 'GB' | 'TB'>(config.dailyQuotaUnit || 'GB');
+  const [dailyQuotaUnit, setDailyQuotaUnit] = useState<'KB' | 'MB' | 'GB' | 'TB'>(config.dailyQuotaUnit || 'GB');
 
   const [isUpdatingGeoIp, setIsUpdatingGeoIp] = useState(false);
   const [lastGeoIpUpdated, setLastGeoIpUpdated] = useState('2026-08-10 23:23:31 (Up-to-date)');
@@ -141,10 +141,9 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
               <div className="relative">
                 <select
                   value={dailyQuotaUnit}
-                  onChange={(e) => setDailyQuotaUnit(e.target.value as 'B' | 'KB' | 'MB' | 'GB' | 'TB')}
+                  onChange={(e) => setDailyQuotaUnit(e.target.value as 'KB' | 'MB' | 'GB' | 'TB')}
                   className="pl-3 pr-9 py-2 bg-slate-900 border border-slate-800 rounded-xl text-xs font-mono font-bold text-slate-200 focus:outline-none focus:border-amber-500/50 appearance-none cursor-pointer"
                 >
-                  <option value="B">B / Day</option>
                   <option value="KB">KB / Day</option>
                   <option value="MB">MB / Day</option>
                   <option value="GB">GB / Day</option>
