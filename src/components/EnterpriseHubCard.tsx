@@ -11,8 +11,6 @@ import {
   HardDrive,
   Search,
   SlidersHorizontal,
-  AlertTriangle,
-  CheckCircle,
   Zap,
   TrendingUp,
   Trash2,
@@ -544,19 +542,6 @@ export const EnterpriseHubCard: React.FC<EnterpriseHubCardProps> = ({
               <HardDrive className="w-4 h-4 text-amber-400" />
               <h3 className="text-xs font-semibold text-slate-200">Daily Network Usage & Quota Limit</h3>
             </div>
-            {isQuotaExceeded ? (
-              <span className="flex items-center gap-1 text-[11px] font-mono text-rose-400 bg-rose-950 px-2 py-0.5 rounded border border-rose-800 animate-pulse font-bold">
-                <AlertTriangle className="w-3.5 h-3.5" /> EXCEEDED
-              </span>
-            ) : isQuotaWarning ? (
-              <span className="flex items-center gap-1 text-[11px] font-mono text-amber-400 bg-amber-950 px-2 py-0.5 rounded border border-amber-800 font-bold">
-                <AlertTriangle className="w-3.5 h-3.5" /> 80% Threshold
-              </span>
-            ) : (
-              <span className="flex items-center gap-1 text-[11px] font-mono text-emerald-400 bg-emerald-950 px-2 py-0.5 rounded border border-emerald-800">
-                <CheckCircle className="w-3.5 h-3.5" /> Within Cap
-              </span>
-            )}
           </div>
         )}
       </div>

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { X, Sliders, Bell, Cpu, ShieldCheck, Globe, RefreshCw } from 'lucide-react';
+import { X, Sliders, Bell, Cpu, ShieldCheck, Globe, RefreshCw, HardDrive } from 'lucide-react';
 import { MonitoringConfig } from '../types/network';
 
 interface SettingsModalProps {
@@ -18,6 +18,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   const [spikeThreshold, setSpikeThreshold] = useState(config.spikeThresholdPacketsPerSec);
   const [notifyNewIp, setNotifyNewIp] = useState(config.notifyOnNewIp);
   const [autoBlock, setAutoBlock] = useState(config.autoBlockSuspicious);
+  const [dailyQuotaGb, setDailyQuotaGb] = useState(config.dailyQuotaGb || 10);
 
   const [isUpdatingGeoIp, setIsUpdatingGeoIp] = useState(false);
   const [lastGeoIpUpdated, setLastGeoIpUpdated] = useState('2026-08-10 23:23:31 (Up-to-date)');
@@ -46,6 +47,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
       spikeThresholdPacketsPerSec: spikeThreshold,
       notifyOnNewIp: notifyNewIp,
       autoBlockSuspicious: autoBlock,
+      dailyQuotaGb: dailyQuotaGb,
     });
     onClose();
   };
@@ -115,11 +117,34 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
             </select>
           </div>
 
-          {/* SECTION 3: Traffic Spike Slider */}
+          {/* SECTION 3: Daily Bandwidth Quota Limit */}
           <div>
             <div className="flex justify-between items-center mb-1.5">
               <label className="font-semibold text-slate-200 flex items-center gap-1.5">
-                <Cpu className="w-3.5 h-3.5 text-amber-400" />
+                <HardDrive className="w-3.5 h-3.5 text-amber-400" />
+                Daily Bandwidth Quota Limit
+              </label>
+              <span className="font-mono text-amber-400 font-bold">{dailyQuotaGb} GB / Day</span>
+            </div>
+            <input
+              type="range"
+              min="1"
+              max="100"
+              step="1"
+              value={dailyQuotaGb}
+              onChange={(e) => setDailyQuotaGb(Number(e.target.value))}
+              className="w-full h-1.5 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-amber-400"
+            />
+            <p className="text-[11px] text-slate-500 mt-1">
+              Sets daily network usage cap limit (1 GB ~ 100 GB). Triggers warnings at 80% and 100%.
+            </p>
+          </div>
+
+          {/* SECTION 4: Traffic Spike Slider */}
+          <div>
+            <div className="flex justify-between items-center mb-1.5">
+              <label className="font-semibold text-slate-200 flex items-center gap-1.5">
+                <Cpu className="w-3.5 h-3.5 text-cyan-400" />
                 Traffic Spike Threshold
               </label>
               <span className="font-mono text-cyan-400 font-bold">{spikeThreshold} pkts/sec</span>

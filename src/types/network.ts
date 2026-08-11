@@ -74,4 +74,5 @@ export interface MonitoringConfig {
   autoBlockSuspicious: boolean;
   refreshIntervalMs: number;
   activeInterface: string;
+  dailyQuotaGb: number;
 }

@@ -24,6 +24,7 @@ export function App() {
     autoBlockSuspicious: true,
     refreshIntervalMs: 1000,
     activeInterface: 'Ethernet 0 (Intel(R) Ethernet Connection)',
+    dailyQuotaGb: 10,
   });
 
   useEffect(() => {
@@ -72,8 +73,8 @@ export function App() {
   const geoNodes = packetEngine.getGeoNodes();
   const cumulativeGeoNodes = packetEngine.getCumulativeGeoNodes();
 
-  // Daily Quota: 10 GB limit for demonstration
-  const dailyQuotaBytes = 10 * 1024 * 1024 * 1024;
+  // Daily Quota Limit (Dynamic from Config, defaults to 10 GB)
+  const dailyQuotaBytes = (config.dailyQuotaGb || 10) * 1024 * 1024 * 1024;
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col font-sans antialiased selection:bg-cyan-500 selection:text-slate-950">
