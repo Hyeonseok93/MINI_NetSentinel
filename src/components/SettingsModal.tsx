@@ -18,7 +18,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   const [spikeThreshold, setSpikeThreshold] = useState(config.spikeThresholdPacketsPerSec);
   const [notifyNewIp, setNotifyNewIp] = useState(config.notifyOnNewIp);
   const [autoBlock, setAutoBlock] = useState(config.autoBlockSuspicious);
-  const [dailyQuotaGb, setDailyQuotaGb] = useState(config.dailyQuotaGb || 10);
+  const [dailyQuotaValue, setDailyQuotaValue] = useState(config.dailyQuotaValue || 10);
+  const [dailyQuotaUnit, setDailyQuotaUnit] = useState<'KB' | 'MB' | 'GB'>(config.dailyQuotaUnit || 'GB');
 
   const [isUpdatingGeoIp, setIsUpdatingGeoIp] = useState(false);
   const [lastGeoIpUpdated, setLastGeoIpUpdated] = useState('2026-08-10 23:23:31 (Up-to-date)');
@@ -47,7 +48,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
       spikeThresholdPacketsPerSec: spikeThreshold,
       notifyOnNewIp: notifyNewIp,
       autoBlockSuspicious: autoBlock,
-      dailyQuotaGb: dailyQuotaGb,
+      dailyQuotaValue: Math.max(1, dailyQuotaValue),
+      dailyQuotaUnit: dailyQuotaUnit,
     });
     onClose();
   };
@@ -119,24 +121,32 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 
           {/* SECTION 3: Daily Bandwidth Quota Limit */}
           <div>
-            <div className="flex justify-between items-center mb-1.5">
-              <label className="font-semibold text-slate-200 flex items-center gap-1.5">
-                <HardDrive className="w-3.5 h-3.5 text-amber-400" />
-                Daily Bandwidth Quota Limit
-              </label>
-              <span className="font-mono text-amber-400 font-bold">{dailyQuotaGb} GB / Day</span>
+            <label className="font-semibold text-slate-200 flex items-center gap-1.5 mb-1.5">
+              <HardDrive className="w-3.5 h-3.5 text-amber-400" />
+              Daily Bandwidth Quota Limit
+            </label>
+            <div className="flex items-center gap-2">
+              <input
+                type="number"
+                min="1"
+                step="0.1"
+                value={dailyQuotaValue}
+                onChange={(e) => setDailyQuotaValue(Number(e.target.value))}
+                className="flex-1 px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-xs font-mono font-bold text-amber-300 focus:outline-none focus:border-amber-500/50"
+                placeholder="Enter quota limit..."
+              />
+              <select
+                value={dailyQuotaUnit}
+                onChange={(e) => setDailyQuotaUnit(e.target.value as 'KB' | 'MB' | 'GB')}
+                className="px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-xs font-mono font-bold text-slate-200 focus:outline-none focus:border-amber-500/50 cursor-pointer"
+              >
+                <option value="KB">KB / Day</option>
+                <option value="MB">MB / Day</option>
+                <option value="GB">GB / Day</option>
+              </select>
             </div>
-            <input
-              type="range"
-              min="1"
-              max="100"
-              step="1"
-              value={dailyQuotaGb}
-              onChange={(e) => setDailyQuotaGb(Number(e.target.value))}
-              className="w-full h-1.5 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-amber-400"
-            />
             <p className="text-[11px] text-slate-500 mt-1">
-              Sets daily network usage cap limit (1 GB ~ 100 GB). Triggers warnings at 80% and 100%.
+              Specify exact daily network usage limit and unit (e.g. 500 MB, 10 GB, 100 KB).
             </p>
           </div>
 

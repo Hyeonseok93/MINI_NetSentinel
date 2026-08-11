@@ -74,5 +74,6 @@ export interface MonitoringConfig {
   autoBlockSuspicious: boolean;
   refreshIntervalMs: number;
   activeInterface: string;
-  dailyQuotaGb: number;
+  dailyQuotaValue: number;
+  dailyQuotaUnit: 'KB' | 'MB' | 'GB';
 }

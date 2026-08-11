@@ -536,14 +536,7 @@ export const EnterpriseHubCard: React.FC<EnterpriseHubCardProps> = ({
           </div>
         )}
 
-        {activeTab === 'quota' && (
-          <div className="pt-2 flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <HardDrive className="w-4 h-4 text-amber-400" />
-              <h3 className="text-xs font-semibold text-slate-200">Daily Network Usage & Quota Limit</h3>
-            </div>
-          </div>
-        )}
+        {activeTab === 'quota' && null}
       </div>
 
       {/* Shared Container with Shared Max Height & Custom Scrollbar */}
