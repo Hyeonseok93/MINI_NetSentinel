@@ -74,9 +74,19 @@ export function App() {
   const geoNodes = packetEngine.getGeoNodes();
   const cumulativeGeoNodes = packetEngine.getCumulativeGeoNodes();
 
-  // Dynamic Daily Quota Limit with Unit Conversion (KB, MB, GB)
+  // Dynamic Daily Quota Limit with Unit Conversion (B, KB, MB, GB, TB)
   const quotaVal = config.dailyQuotaValue || 10;
-  const quotaUnitMultiplier = config.dailyQuotaUnit === 'KB' ? 1024 : config.dailyQuotaUnit === 'MB' ? 1024 * 1024 : 1024 * 1024 * 1024;
+  const unit = config.dailyQuotaUnit || 'GB';
+  const quotaUnitMultiplier =
+    unit === 'B'
+      ? 1
+      : unit === 'KB'
+      ? 1024
+      : unit === 'MB'
+      ? 1024 * 1024
+      : unit === 'GB'
+      ? 1024 * 1024 * 1024
+      : 1024 * 1024 * 1024 * 1024; // TB
   const dailyQuotaBytes = quotaVal * quotaUnitMultiplier;
 
   return (

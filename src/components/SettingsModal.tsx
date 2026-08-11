@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { X, Sliders, Bell, Cpu, ShieldCheck, Globe, RefreshCw, HardDrive } from 'lucide-react';
+import { X, Sliders, Bell, Cpu, ShieldCheck, Globe, RefreshCw, HardDrive, ChevronDown } from 'lucide-react';
 import { MonitoringConfig } from '../types/network';
 
 interface SettingsModalProps {
@@ -19,7 +19,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   const [notifyNewIp, setNotifyNewIp] = useState(config.notifyOnNewIp);
   const [autoBlock, setAutoBlock] = useState(config.autoBlockSuspicious);
   const [dailyQuotaValue, setDailyQuotaValue] = useState(config.dailyQuotaValue || 10);
-  const [dailyQuotaUnit, setDailyQuotaUnit] = useState<'KB' | 'MB' | 'GB'>(config.dailyQuotaUnit || 'GB');
+  const [dailyQuotaUnit, setDailyQuotaUnit] = useState<'B' | 'KB' | 'MB' | 'GB' | 'TB'>(config.dailyQuotaUnit || 'GB');
 
   const [isUpdatingGeoIp, setIsUpdatingGeoIp] = useState(false);
   const [lastGeoIpUpdated, setLastGeoIpUpdated] = useState('2026-08-10 23:23:31 (Up-to-date)');
@@ -105,18 +105,21 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
             <label className="font-semibold text-slate-200 block mb-1.5">
               Active Network Adapter
             </label>
-            <select
-              defaultValue={config.activeInterface}
-              className="w-full p-2 bg-slate-900 border border-slate-800 rounded-xl text-xs text-slate-200 focus:outline-none focus:border-cyan-500/50 font-mono"
-            >
-              <option value="Ethernet 0 (Intel(R) Ethernet Connection)">
-                Ethernet 0 (Intel(R) Ethernet Connection)
-              </option>
-              <option value="Wi-Fi (Realtek 8822CE Wireless LAN)">
-                Wi-Fi (Realtek 8822CE Wireless LAN)
-              </option>
-              <option value="Npcap Loopback Adapter">Npcap Loopback Adapter</option>
-            </select>
+            <div className="relative">
+              <select
+                defaultValue={config.activeInterface}
+                className="w-full pl-3 pr-9 py-2 bg-slate-900 border border-slate-800 rounded-xl text-xs text-slate-200 focus:outline-none focus:border-cyan-500/50 font-mono appearance-none cursor-pointer"
+              >
+                <option value="Ethernet 0 (Intel(R) Ethernet Connection)">
+                  Ethernet 0 (Intel(R) Ethernet Connection)
+                </option>
+                <option value="Wi-Fi (Realtek 8822CE Wireless LAN)">
+                  Wi-Fi (Realtek 8822CE Wireless LAN)
+                </option>
+                <option value="Npcap Loopback Adapter">Npcap Loopback Adapter</option>
+              </select>
+              <ChevronDown className="w-4 h-4 text-slate-400 absolute right-3 top-2.5 pointer-events-none" />
+            </div>
           </div>
 
           {/* SECTION 3: Daily Bandwidth Quota Limit */}
@@ -135,18 +138,23 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 className="flex-1 px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-xs font-mono font-bold text-amber-300 focus:outline-none focus:border-amber-500/50"
                 placeholder="Enter quota limit..."
               />
-              <select
-                value={dailyQuotaUnit}
-                onChange={(e) => setDailyQuotaUnit(e.target.value as 'KB' | 'MB' | 'GB')}
-                className="px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-xs font-mono font-bold text-slate-200 focus:outline-none focus:border-amber-500/50 cursor-pointer"
-              >
-                <option value="KB">KB / Day</option>
-                <option value="MB">MB / Day</option>
-                <option value="GB">GB / Day</option>
-              </select>
+              <div className="relative">
+                <select
+                  value={dailyQuotaUnit}
+                  onChange={(e) => setDailyQuotaUnit(e.target.value as 'B' | 'KB' | 'MB' | 'GB' | 'TB')}
+                  className="pl-3 pr-9 py-2 bg-slate-900 border border-slate-800 rounded-xl text-xs font-mono font-bold text-slate-200 focus:outline-none focus:border-amber-500/50 appearance-none cursor-pointer"
+                >
+                  <option value="B">B / Day</option>
+                  <option value="KB">KB / Day</option>
+                  <option value="MB">MB / Day</option>
+                  <option value="GB">GB / Day</option>
+                  <option value="TB">TB / Day</option>
+                </select>
+                <ChevronDown className="w-4 h-4 text-amber-400 absolute right-3 top-2.5 pointer-events-none" />
+              </div>
             </div>
             <p className="text-[11px] text-slate-500 mt-1">
-              Specify exact daily network usage limit and unit (e.g. 500 MB, 10 GB, 100 KB).
+              Specify exact daily network usage limit and unit (B, KB, MB, GB, TB).
             </p>
           </div>
 

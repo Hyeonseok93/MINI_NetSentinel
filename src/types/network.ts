@@ -75,5 +75,5 @@ export interface MonitoringConfig {
   refreshIntervalMs: number;
   activeInterface: string;
   dailyQuotaValue: number;
-  dailyQuotaUnit: 'KB' | 'MB' | 'GB';
+  dailyQuotaUnit: 'B' | 'KB' | 'MB' | 'GB' | 'TB';
 }
