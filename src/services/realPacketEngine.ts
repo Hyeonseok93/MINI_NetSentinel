@@ -297,7 +297,7 @@ export class RealPacketEngine {
       trusted.push({
         ip,
         domain: sess?.domain,
-        addedAt: '2026-08-10 Live',
+        addedAt: sess?.lastSeen || new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
       });
     });
     return trusted;
