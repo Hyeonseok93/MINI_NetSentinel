@@ -22,7 +22,7 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
       <div className="flex items-center justify-between text-xs font-mono relative z-10">
         <div className="flex items-center gap-2 text-emerald-400 font-bold">
           <Globe className="w-4 h-4 text-emerald-400 animate-pulse" />
-          <span>GLOBAL THREAT MAP RADAR CANOPY</span>
+          <span>REAL-TIME GLOBAL VECTOR GEOGRAPHY MAP</span>
         </div>
         <div className="flex items-center gap-3 text-[11px] text-slate-400 font-mono">
           <span className="flex items-center gap-1">
@@ -33,133 +33,139 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
         </div>
       </div>
 
-      {/* SVG Interactive World Canvas */}
-      <div className="relative w-full h-[220px] bg-slate-900/40 rounded-xl border border-slate-800/60 overflow-hidden flex items-center justify-center">
+      {/* SVG Interactive Real-World Geography Canvas */}
+      <div className="relative w-full h-[230px] bg-slate-900/50 rounded-xl border border-slate-800/60 overflow-hidden flex items-center justify-center">
         <svg
           viewBox="0 0 1000 500"
-          className="w-full h-full object-contain filter drop-shadow-[0_0_12px_rgba(16,185,129,0.15)] transition-all duration-700"
+          className="w-full h-full object-contain filter drop-shadow-[0_0_15px_rgba(16,185,129,0.15)] transition-all duration-700"
         >
-          {/* World Continent Vector Outlines */}
-          {/* North America */}
+          {/* Latitude & Longitude Dotted Grid Overlay */}
+          <line x1="0" y1="250" x2="1000" y2="250" stroke="#334155" strokeDasharray="4,4" strokeWidth="1" opacity="0.4" />
+          <line x1="500" y1="0" x2="500" y2="500" stroke="#334155" strokeDasharray="4,4" strokeWidth="1" opacity="0.4" />
+
+          {/* REAL WORLD CONTINENT VECTOR PATHS */}
+          
+          {/* 1. North America */}
           <path
-            d="M 120 80 Q 220 50 320 120 T 260 260 T 140 220 Z"
-            fill={selectedContinent === 'All' || selectedContinent === 'North America' ? '#9333ea25' : '#1e293b30'}
-            stroke={selectedContinent === 'North America' ? '#c084fc' : '#47556940'}
+            d="M 110,80 L 150,70 L 190,60 L 240,55 L 290,65 L 320,85 L 300,120 L 280,150 L 250,180 L 235,215 L 220,240 L 205,230 L 190,195 L 165,185 L 155,210 L 125,180 L 130,135 Z"
+            fill={selectedContinent === 'All' || selectedContinent === 'North America' ? '#a855f725' : '#1e293b20'}
+            stroke={selectedContinent === 'North America' ? '#c084fc' : '#47556950'}
             strokeWidth={selectedContinent === 'North America' ? '2.5' : '1.5'}
             className="cursor-pointer hover:fill-purple-500/30 transition-all duration-300"
             onClick={() => onSelectContinent('North America')}
           />
 
-          {/* South America */}
+          {/* 2. South America */}
           <path
-            d="M 280 270 Q 340 290 320 380 T 260 460 T 240 340 Z"
-            fill={selectedContinent === 'All' || selectedContinent === 'South America' ? '#f59e0b25' : '#1e293b30'}
-            stroke={selectedContinent === 'South America' ? '#fbbf24' : '#47556940'}
+            d="M 235,245 L 265,240 L 295,265 L 325,295 L 315,345 L 285,415 L 255,465 L 245,435 L 240,355 L 248,295 Z"
+            fill={selectedContinent === 'All' || selectedContinent === 'South America' ? '#f59e0b25' : '#1e293b20'}
+            stroke={selectedContinent === 'South America' ? '#fbbf24' : '#47556950'}
             strokeWidth={selectedContinent === 'South America' ? '2.5' : '1.5'}
             className="cursor-pointer hover:fill-amber-500/30 transition-all duration-300"
             onClick={() => onSelectContinent('South America')}
           />
 
-          {/* Europe */}
+          {/* 3. Europe */}
           <path
-            d="M 450 70 Q 560 60 580 140 T 480 200 T 440 120 Z"
-            fill={selectedContinent === 'All' || selectedContinent === 'Europe' ? '#3b82f625' : '#1e293b30'}
-            stroke={selectedContinent === 'Europe' ? '#60a5fa' : '#47556940'}
+            d="M 445,75 L 485,60 L 525,65 L 565,80 L 555,130 L 525,165 L 485,175 L 445,150 L 440,110 Z"
+            fill={selectedContinent === 'All' || selectedContinent === 'Europe' ? '#3b82f625' : '#1e293b20'}
+            stroke={selectedContinent === 'Europe' ? '#60a5fa' : '#47556950'}
             strokeWidth={selectedContinent === 'Europe' ? '2.5' : '1.5'}
             className="cursor-pointer hover:fill-blue-500/30 transition-all duration-300"
             onClick={() => onSelectContinent('Europe')}
           />
 
-          {/* Africa */}
+          {/* 4. Africa */}
           <path
-            d="M 460 210 Q 580 200 560 340 T 480 430 T 440 300 Z"
-            fill={selectedContinent === 'All' || selectedContinent === 'Africa' ? '#10b98125' : '#1e293b30'}
-            stroke={selectedContinent === 'Africa' ? '#34d399' : '#47556940'}
+            d="M 435,185 L 485,185 L 540,215 L 555,265 L 525,345 L 495,425 L 465,395 L 445,325 L 425,255 L 435,215 Z"
+            fill={selectedContinent === 'All' || selectedContinent === 'Africa' ? '#10b98125' : '#1e293b20'}
+            stroke={selectedContinent === 'Africa' ? '#34d399' : '#47556950'}
             strokeWidth={selectedContinent === 'Africa' ? '2.5' : '1.5'}
             className="cursor-pointer hover:fill-emerald-500/30 transition-all duration-300"
             onClick={() => onSelectContinent('Africa')}
           />
 
-          {/* Asia */}
+          {/* 5. Asia (Includes Korean Peninsula & Japan Isles Outlines) */}
           <path
-            d="M 590 80 Q 820 60 880 180 T 720 280 T 580 190 Z"
-            fill={selectedContinent === 'All' || selectedContinent === 'Asia' ? '#06b6d425' : '#1e293b30'}
-            stroke={selectedContinent === 'Asia' ? '#22d3ee' : '#47556940'}
+            d="M 570,70 L 660,55 L 790,50 L 880,80 L 900,140 L 840,220 L 770,260 L 720,280 L 670,250 L 620,210 L 580,160 Z"
+            fill={selectedContinent === 'All' || selectedContinent === 'Asia' ? '#06b6d425' : '#1e293b20'}
+            stroke={selectedContinent === 'Asia' ? '#22d3ee' : '#47556950'}
             strokeWidth={selectedContinent === 'Asia' ? '2.5' : '1.5'}
             className="cursor-pointer hover:fill-cyan-500/30 transition-all duration-300"
             onClick={() => onSelectContinent('Asia')}
           />
 
-          {/* Oceania / Australia */}
+          {/* 6. Oceania (Australia & New Zealand) */}
           <path
-            d="M 760 320 Q 890 310 880 410 T 780 430 T 740 360 Z"
-            fill={selectedContinent === 'All' || selectedContinent === 'Oceania' ? '#10b98125' : '#1e293b30'}
-            stroke={selectedContinent === 'Oceania' ? '#34d399' : '#47556940'}
+            d="M 745,325 L 825,315 L 875,355 L 865,415 L 805,435 L 745,405 L 735,355 Z"
+            fill={selectedContinent === 'All' || selectedContinent === 'Oceania' ? '#10b98125' : '#1e293b20'}
+            stroke={selectedContinent === 'Oceania' ? '#34d399' : '#47556950'}
             strokeWidth={selectedContinent === 'Oceania' ? '2.5' : '1.5'}
             className="cursor-pointer hover:fill-emerald-500/30 transition-all duration-300"
             onClick={() => onSelectContinent('Oceania')}
           />
         </svg>
 
-        {/* Interactive Ping Bubbles Over Continents */}
-        {/* Asia Node */}
+        {/* Interactive Ping Radar Badges over Real Geography Centroids */}
+        
+        {/* Asia Centroid (KR, JP, SG, CN) */}
         <div
           onClick={() => onSelectContinent('Asia')}
-          className={`absolute top-[32%] left-[72%] -translate-x-1/2 -translate-y-1/2 cursor-pointer group transition-all ${
+          className={`absolute top-[32%] left-[73%] -translate-x-1/2 -translate-y-1/2 cursor-pointer group transition-all ${
             selectedContinent === 'Asia' ? 'scale-125 z-30' : 'hover:scale-110 z-20'
           }`}
         >
           <div className="relative flex items-center justify-center">
             <span className="absolute w-8 h-8 rounded-full bg-cyan-500/40 animate-ping" />
-            <div className="p-1.5 rounded-full bg-slate-950 border border-cyan-400 text-cyan-300 shadow-[0_0_12px_rgba(34,211,238,0.8)] flex items-center gap-1 px-2.5 py-1 text-[10px] font-mono font-bold">
+            <div className="p-1 rounded-full bg-slate-950 border border-cyan-400 text-cyan-300 shadow-[0_0_12px_rgba(34,211,238,0.8)] flex items-center gap-1.5 px-2.5 py-1 text-[10px] font-mono font-bold">
               <span>🌏 Asia</span>
-              <span className="px-1 py-0.2 rounded-full bg-cyan-950 text-cyan-300 border border-cyan-800 text-[9px]">
+              <span className="px-1.5 py-0.2 rounded-full bg-cyan-950 text-cyan-300 border border-cyan-800 text-[9px]">
                 {continentStats.Asia.ipCount} IPs
               </span>
             </div>
           </div>
         </div>
 
-        {/* North America Node */}
+        {/* North America Centroid (US, CA) */}
         <div
           onClick={() => onSelectContinent('North America')}
-          className={`absolute top-[30%] left-[22%] -translate-x-1/2 -translate-y-1/2 cursor-pointer group transition-all ${
+          className={`absolute top-[26%] left-[22%] -translate-x-1/2 -translate-y-1/2 cursor-pointer group transition-all ${
             selectedContinent === 'North America' ? 'scale-125 z-30' : 'hover:scale-110 z-20'
           }`}
         >
           <div className="relative flex items-center justify-center">
             <span className="absolute w-8 h-8 rounded-full bg-purple-500/40 animate-ping" />
-            <div className="p-1.5 rounded-full bg-slate-950 border border-purple-400 text-purple-300 shadow-[0_0_12px_rgba(192,132,252,0.8)] flex items-center gap-1 px-2.5 py-1 text-[10px] font-mono font-bold">
+            <div className="p-1 rounded-full bg-slate-950 border border-purple-400 text-purple-300 shadow-[0_0_12px_rgba(192,132,252,0.8)] flex items-center gap-1.5 px-2.5 py-1 text-[10px] font-mono font-bold">
               <span>🌎 N.America</span>
-              <span className="px-1 py-0.2 rounded-full bg-purple-950 text-purple-300 border border-purple-800 text-[9px]">
+              <span className="px-1.5 py-0.2 rounded-full bg-purple-950 text-purple-300 border border-purple-800 text-[9px]">
                 {continentStats['North America'].ipCount} IPs
               </span>
             </div>
           </div>
         </div>
 
-        {/* Europe Node */}
+        {/* Europe Centroid (GB, DE, FR, IT) */}
         <div
           onClick={() => onSelectContinent('Europe')}
-          className={`absolute top-[28%] left-[50%] -translate-x-1/2 -translate-y-1/2 cursor-pointer group transition-all ${
+          className={`absolute top-[26%] left-[49%] -translate-x-1/2 -translate-y-1/2 cursor-pointer group transition-all ${
             selectedContinent === 'Europe' ? 'scale-125 z-30' : 'hover:scale-110 z-20'
           }`}
         >
           <div className="relative flex items-center justify-center">
             <span className="absolute w-8 h-8 rounded-full bg-blue-500/40 animate-ping" />
-            <div className="p-1.5 rounded-full bg-slate-950 border border-blue-400 text-blue-300 shadow-[0_0_12px_rgba(96,165,250,0.8)] flex items-center gap-1 px-2.5 py-1 text-[10px] font-mono font-bold">
+            <div className="p-1 rounded-full bg-slate-950 border border-blue-400 text-blue-300 shadow-[0_0_12px_rgba(96,165,250,0.8)] flex items-center gap-1.5 px-2.5 py-1 text-[10px] font-mono font-bold">
               <span>🌍 Europe</span>
-              <span className="px-1 py-0.2 rounded-full bg-blue-950 text-blue-300 border border-blue-800 text-[9px]">
+              <span className="px-1.5 py-0.2 rounded-full bg-blue-950 text-blue-300 border border-blue-800 text-[9px]">
                 {continentStats.Europe.ipCount} IPs
               </span>
             </div>
           </div>
         </div>
 
-        {/* South America Node */}
+        {/* South America Centroid (BR, AR) */}
         <div
           onClick={() => onSelectContinent('South America')}
-          className={`absolute top-[70%] left-[30%] -translate-x-1/2 -translate-y-1/2 cursor-pointer group transition-all ${
+          className={`absolute top-[68%] left-[27%] -translate-x-1/2 -translate-y-1/2 cursor-pointer group transition-all ${
             selectedContinent === 'South America' ? 'scale-125 z-30' : 'hover:scale-110 z-20'
           }`}
         >
@@ -174,10 +180,10 @@ export const WorldMapCanvas: React.FC<WorldMapCanvasProps> = ({
           </div>
         </div>
 
-        {/* Oceania Node */}
+        {/* Oceania Centroid (AU, NZ) */}
         <div
           onClick={() => onSelectContinent('Oceania')}
-          className={`absolute top-[72%] left-[82%] -translate-x-1/2 -translate-y-1/2 cursor-pointer group transition-all ${
+          className={`absolute top-[72%] left-[80%] -translate-x-1/2 -translate-y-1/2 cursor-pointer group transition-all ${
             selectedContinent === 'Oceania' ? 'scale-125 z-30' : 'hover:scale-110 z-20'
           }`}
         >
