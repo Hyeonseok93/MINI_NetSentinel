@@ -170,7 +170,10 @@ export const TrafficChart: React.FC<TrafficChartProps> = ({ data }) => {
               stroke="#64748b"
               fontSize={11}
               tickLine={false}
-              minTickGap={35}
+              minTickGap={48}
+              height={28}
+              tick={{ fill: '#64748b', fontSize: 11 }}
+              interval="preserveStartEnd"
             />
             <YAxis stroke="#64748b" fontSize={11} tickLine={false} />
             <Tooltip

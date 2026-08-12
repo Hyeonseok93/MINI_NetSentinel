@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { ProcessTrafficPoint } from '../../types/network';
+import { ProcessTrafficPoint, GroupedProcess } from '../../types/network';
 import { formatBytes } from '../../utils/formatters';
 import {
   Globe,
@@ -12,16 +12,6 @@ import {
   ChevronDown,
   ChevronUp,
 } from 'lucide-react';
-
-export interface GroupedProcess {
-  processName: string;
-  totalBytes: number;
-  totalPackets: number;
-  packetsIn: number;
-  packetsOut: number;
-  iconType: ProcessTrafficPoint['iconType'];
-  pids: ProcessTrafficPoint[];
-}
 
 interface HubAppsGridProps {
   groupedProcesses: GroupedProcess[];

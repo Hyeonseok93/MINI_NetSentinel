@@ -1,20 +1,37 @@
 import React, { useState } from 'react';
 import { IpSession, ProcessTrafficPoint, GeoNode } from '../types/network';
 import { HubSessionsTable } from './hub/HubSessionsTable';
-import { HubAppsGrid, GroupedProcess } from './hub/HubAppsGrid';
+import { HubAppsGrid } from './hub/HubAppsGrid';
 import { HubGeoGrid } from './hub/HubGeoGrid';
 import { HubQuotaPanel } from './hub/HubQuotaPanel';
+import { HubTabBar } from './hub/HubTabBar';
+import {
+  filterAndSortSessions,
+  groupAndSortProcesses,
+  filterAndSortGeoNodes,
+} from './hub/hubFilters';
+import {
+  MainTabKey,
+  SortOptionKey,
+  AppSortOptionKey,
+  GeoSortOptionKey,
+  SessionFilterType,
+} from './hub/hubTypes';
 import {
   Server,
-  Cpu,
-  Globe2,
-  HardDrive,
   Search,
   SlidersHorizontal,
   Zap,
   TrendingUp,
   Trash2,
 } from 'lucide-react';
+
+export type {
+  MainTabKey,
+  SortOptionKey,
+  AppSortOptionKey,
+  GeoSortOptionKey,
+} from './hub/hubTypes';
 
 interface EnterpriseHubCardProps {
   sessions: IpSession[];
@@ -32,32 +49,6 @@ interface EnterpriseHubCardProps {
   onClearCumulativeGeoNodes?: () => void;
   getCumulativeGeoSessions?: (country: string) => IpSession[];
 }
-
-export type MainTabKey = 'sessions' | 'apps' | 'geo' | 'quota';
-
-export type SortOptionKey =
-  | 'packets-desc'
-  | 'packets-asc'
-  | 'bytes-desc'
-  | 'bytes-asc'
-  | 'ip-asc'
-  | 'ip-desc'
-  | 'domain-asc'
-  | 'recent-desc';
-
-export type AppSortOptionKey =
-  | 'bytes-desc'
-  | 'bytes-asc'
-  | 'packets-desc'
-  | 'name-asc'
-  | 'pid-asc';
-
-export type GeoSortOptionKey =
-  | 'ips-desc'
-  | 'ips-asc'
-  | 'bytes-desc'
-  | 'bytes-asc'
-  | 'country-asc';
 
 export const EnterpriseHubCard: React.FC<EnterpriseHubCardProps> = ({
   sessions,
@@ -79,7 +70,7 @@ export const EnterpriseHubCard: React.FC<EnterpriseHubCardProps> = ({
 
   // IP Table Filter & Sort State
   const [searchTerm, setSearchTerm] = useState('');
-  const [filterType, setFilterType] = useState<'all' | 'new' | 'normal' | 'suspicious' | 'baseline'>('all');
+  const [filterType, setFilterType] = useState<SessionFilterType>('all');
   const [sortOption, setSortOption] = useState<SortOptionKey>('packets-desc');
 
   // App Breakdown Sub-Tab, Search & Sort State
@@ -93,131 +84,38 @@ export const EnterpriseHubCard: React.FC<EnterpriseHubCardProps> = ({
   const [geoSortOption, setGeoSortOption] = useState<GeoSortOptionKey>('ips-desc');
 
   // 1. IP Sessions Filter & Sort
-  const filteredSessions = React.useMemo(() => {
-    return sessions
-      .filter((s) => {
-        const matchSearch =
-          s.ip.toLowerCase().includes(searchTerm.toLowerCase()) ||
-          (s.domain && s.domain.toLowerCase().includes(searchTerm.toLowerCase())) ||
-          s.country.toLowerCase().includes(searchTerm.toLowerCase());
-
-        const matchType =
-          filterType === 'all'
-            ? true
-            : filterType === 'baseline'
-            ? s.isBaseline
-            : s.status === filterType;
-
-        return matchSearch && matchType;
-      })
-      .sort((a, b) => {
-        switch (sortOption) {
-          case 'packets-desc':
-            return b.totalPackets - a.totalPackets;
-          case 'packets-asc':
-            return a.totalPackets - b.totalPackets;
-          case 'bytes-desc':
-            return b.totalBytes - a.totalBytes;
-          case 'bytes-asc':
-            return a.totalBytes - b.totalBytes;
-          case 'ip-asc':
-            return a.ip.localeCompare(b.ip);
-          case 'ip-desc':
-            return b.ip.localeCompare(a.ip);
-          case 'domain-asc':
-            return (a.domain || '').localeCompare(b.domain || '');
-          case 'recent-desc':
-            return (b.lastSeen || '').localeCompare(a.lastSeen || '');
-          default:
-            return b.totalPackets - a.totalPackets;
-        }
-      });
-  }, [sessions, searchTerm, filterType, sortOption]);
+  const filteredSessions = React.useMemo(
+    () => filterAndSortSessions(sessions, searchTerm, filterType, sortOption),
+    [sessions, searchTerm, filterType, sortOption]
+  );
 
   // 2. App Breakdown Grouped Aggregation
   const liveAppNames = new Set(processes.map((p) => p.processName));
   const cumulativeAppNames = new Set(cumulativeProcesses.map((p) => p.processName));
 
-  const targetProcesses = appSubTab === 'cumulative' ? (cumulativeProcesses.length > 0 ? cumulativeProcesses : processes) : processes;
-  const groupedAppMap = new Map<string, GroupedProcess>();
+  const targetProcesses =
+    appSubTab === 'cumulative'
+      ? cumulativeProcesses.length > 0
+        ? cumulativeProcesses
+        : processes
+      : processes;
 
-  targetProcesses.forEach((proc) => {
-    if (
-      appSearchTerm &&
-      !proc.processName.toLowerCase().includes(appSearchTerm.toLowerCase()) &&
-      !proc.pid.toString().includes(appSearchTerm)
-    ) {
-      return;
-    }
+  const groupedProcesses = groupAndSortProcesses(targetProcesses, appSearchTerm, appSortOption);
 
-    if (!groupedAppMap.has(proc.processName)) {
-      groupedAppMap.set(proc.processName, {
-        processName: proc.processName,
-        totalBytes: proc.bytesTotal,
-        totalPackets: proc.totalPackets,
-        packetsIn: proc.packetsIn,
-        packetsOut: proc.packetsOut,
-        iconType: proc.iconType,
-        pids: [{ ...proc }],
-      });
-    } else {
-      const existing = groupedAppMap.get(proc.processName)!;
-      existing.totalBytes += proc.bytesTotal;
-      existing.totalPackets += proc.totalPackets;
-      existing.packetsIn += proc.packetsIn;
-      existing.packetsOut += proc.packetsOut;
-
-      if (!existing.pids.some((p) => p.pid === proc.pid)) {
-        existing.pids.push({ ...proc });
-      }
-    }
-  });
-
-  const groupedProcesses = Array.from(groupedAppMap.values()).sort((a, b) => {
-    switch (appSortOption) {
-      case 'bytes-desc':
-        return b.totalBytes - a.totalBytes;
-      case 'bytes-asc':
-        return a.totalBytes - b.totalBytes;
-      case 'packets-desc':
-        return b.totalPackets - a.totalPackets;
-      case 'name-asc':
-        return a.processName.localeCompare(b.processName);
-      case 'pid-asc':
-        return b.pids.length - a.pids.length;
-      default:
-        return b.totalBytes - a.totalBytes;
-    }
-  });
-
-  const maxAppBytes = Math.max(...groupedProcesses.map((g) => (appSubTab === 'live' ? Math.floor(g.totalBytes / 10) : g.totalBytes)), 1);
+  const maxAppBytes = Math.max(
+    ...groupedProcesses.map((g) => (appSubTab === 'live' ? Math.floor(g.totalBytes / 10) : g.totalBytes)),
+    1
+  );
 
   // 3. Geo Threat Map Filtering & Sorting
-  const targetGeoNodes = geoSubTab === 'cumulative' ? (cumulativeGeoNodes.length > 0 ? cumulativeGeoNodes : geoNodes) : geoNodes;
+  const targetGeoNodes =
+    geoSubTab === 'cumulative'
+      ? cumulativeGeoNodes.length > 0
+        ? cumulativeGeoNodes
+        : geoNodes
+      : geoNodes;
 
-  const filteredGeoNodes = targetGeoNodes
-    .filter((node) => {
-      return (
-        node.country.toLowerCase().includes(geoSearchTerm.toLowerCase()) ||
-        node.countryCode.toLowerCase().includes(geoSearchTerm.toLowerCase())
-      );
-    })
-    .sort((a, b) => {
-      switch (geoSortOption) {
-        case 'ips-desc':
-          return b.activeIpCount - a.activeIpCount;
-        case 'ips-asc':
-          return a.activeIpCount - b.activeIpCount;
-        case 'bytes-desc':
-          return b.totalBytes - a.totalBytes;
-        case 'bytes-asc':
-          return a.totalBytes - b.totalBytes;
-        case 'country-asc':
-          return a.country.localeCompare(b.country);
-        default:
-          return b.activeIpCount - a.activeIpCount;
-      }
-    });
+  const filteredGeoNodes = filterAndSortGeoNodes(targetGeoNodes, geoSearchTerm, geoSortOption);
 
   // 4. Quota Calculations
   const quotaPercent = Math.min(Math.round((currentBytesToday / dailyQuotaBytes) * 100), 100);
@@ -228,67 +126,14 @@ export const EnterpriseHubCard: React.FC<EnterpriseHubCardProps> = ({
     <div className="glass-panel rounded-2xl border border-slate-800/80 overflow-hidden flex flex-col space-y-0">
       {/* 4-Equal-Width Full Span Top Navigation Bar */}
       <div className="p-4 border-b border-slate-800 bg-slate-900/90 space-y-3">
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 w-full">
-          <button
-            onClick={() => setActiveTab('sessions')}
-            className={`py-3 px-4 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-2.5 w-full ${
-              activeTab === 'sessions'
-                ? 'bg-cyan-500/20 text-cyan-400 border border-cyan-500/50 glow-cyan shadow-md'
-                : 'text-slate-400 hover:text-slate-200 bg-slate-950/60 hover:bg-slate-900 border border-slate-800/80'
-            }`}
-          >
-            <Server className="w-4 h-4 text-cyan-400 shrink-0" />
-            <span className="truncate">IP Sessions</span>
-            <span className="px-2 py-0.5 text-[10px] bg-slate-800 rounded-full text-cyan-300 font-mono">
-              {filteredSessions.length}
-            </span>
-          </button>
-
-          <button
-            onClick={() => setActiveTab('apps')}
-            className={`py-3 px-4 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-2.5 w-full ${
-              activeTab === 'apps'
-                ? 'bg-purple-500/20 text-purple-400 border border-purple-500/50 glow-purple shadow-md'
-                : 'text-slate-400 hover:text-slate-200 bg-slate-950/60 hover:bg-slate-900 border border-slate-800/80'
-            }`}
-          >
-            <Cpu className="w-4 h-4 text-purple-400 shrink-0" />
-            <span className="truncate">App Breakdown</span>
-            <span className="px-2 py-0.5 text-[10px] bg-slate-800 rounded-full text-purple-300 font-mono">
-              {groupedProcesses.length}
-            </span>
-          </button>
-
-          <button
-            onClick={() => setActiveTab('geo')}
-            className={`py-3 px-4 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-2.5 w-full ${
-              activeTab === 'geo'
-                ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/50 glow-emerald shadow-md'
-                : 'text-slate-400 hover:text-slate-200 bg-slate-950/60 hover:bg-slate-900 border border-slate-800/80'
-            }`}
-          >
-            <Globe2 className="w-4 h-4 text-emerald-400 shrink-0" />
-            <span className="truncate">Geo Threat Map</span>
-            <span className="px-2 py-0.5 text-[10px] bg-slate-800 rounded-full text-emerald-300 font-mono">
-              {filteredGeoNodes.length}
-            </span>
-          </button>
-
-          <button
-            onClick={() => setActiveTab('quota')}
-            className={`py-3 px-4 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-2.5 w-full ${
-              activeTab === 'quota'
-                ? 'bg-amber-500/20 text-amber-400 border border-amber-500/50 glow-amber shadow-md'
-                : 'text-slate-400 hover:text-slate-200 bg-slate-950/60 hover:bg-slate-900 border border-slate-800/80'
-            }`}
-          >
-            <HardDrive className="w-4 h-4 text-amber-400 shrink-0" />
-            <span className="truncate">Bandwidth Quota</span>
-            <span className="px-2 py-0.5 text-[10px] bg-slate-800 rounded-full text-amber-300 font-mono">
-              {quotaPercent}%
-            </span>
-          </button>
-        </div>
+        <HubTabBar
+          activeTab={activeTab}
+          setActiveTab={setActiveTab}
+          sessionCount={filteredSessions.length}
+          appCount={groupedProcesses.length}
+          geoCount={filteredGeoNodes.length}
+          quotaPercent={quotaPercent}
+        />
 
         {/* Tab-Specific Secondary Controls Bar */}
         {activeTab === 'sessions' && (

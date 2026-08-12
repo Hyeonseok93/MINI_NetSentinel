@@ -1,4 +1,4 @@
-const { app, BrowserWindow, dialog, ipcMain } = require('electron');
+const { app, BrowserWindow, dialog, ipcMain, Tray, Menu, nativeImage } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const { execFileSync, spawn } = require('child_process');
@@ -7,6 +7,99 @@ const firewall = require('./scripts/firewall-windows.cjs');
 
 let splashWindow = null;
 let mainWindow = null;
+let tray = null;
+let isQuitting = false;
+
+// One instance only — leftover processes were still toasting after "close"
+const gotSingleInstanceLock = app.requestSingleInstanceLock();
+if (!gotSingleInstanceLock) {
+  app.quit();
+} else {
+  app.on('second-instance', () => {
+    showMainWindow();
+  });
+}
+
+function hardShutdown(reason = 'shutdown') {
+  if (isQuitting) return;
+  isQuitting = true;
+  console.log('[electron] Hard shutdown:', reason);
+  try {
+    telemetry.stopPacketCapture();
+  } catch (_) {}
+  try {
+    if (tray) {
+      tray.destroy();
+      tray = null;
+    }
+  } catch (_) {}
+  try {
+    if (splashWindow && !splashWindow.isDestroyed()) splashWindow.destroy();
+  } catch (_) {}
+  try {
+    if (mainWindow && !mainWindow.isDestroyed()) mainWindow.destroy();
+  } catch (_) {}
+  splashWindow = null;
+  mainWindow = null;
+  // Ensure all Electron child processes die (stops background toasts)
+  app.exit(0);
+}
+
+function showMainWindow() {
+  if (!mainWindow || mainWindow.isDestroyed()) return;
+  if (mainWindow.isMinimized()) mainWindow.restore();
+  mainWindow.show();
+  mainWindow.focus();
+}
+
+function hideMainWindowToTray() {
+  if (!mainWindow || mainWindow.isDestroyed()) return;
+  mainWindow.hide();
+}
+
+function buildTrayMenu() {
+  return Menu.buildFromTemplate([
+    {
+      label: 'Open NetSentinel',
+      click: () => showMainWindow(),
+    },
+    { type: 'separator' },
+    {
+      label: 'Quit NetSentinel',
+      click: () => hardShutdown('tray-quit'),
+    },
+  ]);
+}
+
+function createTray(iconPath) {
+  if (tray) return;
+  let image = null;
+  if (iconPath && fs.existsSync(iconPath)) {
+    image = nativeImage.createFromPath(iconPath);
+    if (!image.isEmpty()) {
+      // Windows tray icons look best around 16–32px
+      const size = process.platform === 'win32' ? 16 : 22;
+      image = image.resize({ width: size, height: size });
+    }
+  }
+  if (!image || image.isEmpty()) {
+    // 16x16 cyan-ish fallback so tray still appears without icon.ico
+    const png = Buffer.from(
+      'iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAAKElEQVQ4T2NkYGD4z0ABYBzVMKoBBg0cNQAjwcgIJw+G0Q3AaMADAN6gBBH1nYcZAAAAAElFTkSuQmCC',
+      'base64'
+    );
+    image = nativeImage.createFromBuffer(png);
+  }
+
+  tray = new Tray(image);
+  tray.setToolTip('NetSentinel — monitoring in background');
+  tray.setContextMenu(buildTrayMenu());
+  tray.on('double-click', () => showMainWindow());
+  // Windows: single left-click also opens the app (context menu is right-click)
+  tray.on('click', (_event, _bounds, position) => {
+    if (process.platform === 'win32') showMainWindow();
+  });
+}
 
 function isRunningAsAdmin() {
   if (process.platform !== 'win32') return true;
@@ -127,18 +220,34 @@ ipcMain.handle('list-capture-adapters', async () => {
 });
 
 ipcMain.handle('set-capture-adapter', async (_evt, deviceName) => {
-  return telemetry.setCaptureDevice(deviceName ? String(deviceName) : null);
+  const name = deviceName ? String(deviceName) : '';
+  if (!name) return telemetry.setCaptureDevice(null);
+  const listed = telemetry.listCaptureDevices() || [];
+  const ok = listed.some((d) => d && d.name === name);
+  if (!ok) {
+    return { ok: false, error: `Unknown capture adapter: ${name}` };
+  }
+  return telemetry.setCaptureDevice(name);
 });
 
 ipcMain.handle('show-toast', async (_evt, payload) => {
   try {
+    if (isQuitting || !app.isReady()) {
+      return { ok: false, error: 'App is quitting' };
+    }
+    // Allow toasts while hidden in tray; block only when truly gone / quitting
+    if (!mainWindow || mainWindow.isDestroyed()) {
+      return { ok: false, error: 'Main window not active' };
+    }
     const { Notification } = require('electron');
     if (!Notification.isSupported()) {
       return { ok: false, error: 'Notifications not supported' };
     }
+    const title = String(payload?.title || 'NetSentinel').slice(0, 120);
+    const body = String(payload?.body || '').slice(0, 400);
     const note = new Notification({
-      title: String(payload?.title || 'NetSentinel'),
-      body: String(payload?.body || ''),
+      title,
+      body,
       silent: false,
     });
     note.show();
@@ -146,6 +255,40 @@ ipcMain.handle('show-toast', async (_evt, payload) => {
   } catch (err) {
     return { ok: false, error: err?.message || String(err) };
   }
+});
+
+function getSenderWindow(evt) {
+  return BrowserWindow.fromWebContents(evt.sender);
+}
+
+ipcMain.handle('window-minimize', (evt) => {
+  const win = getSenderWindow(evt);
+  if (win && !win.isDestroyed()) win.minimize();
+  return { ok: true };
+});
+
+ipcMain.handle('window-minimize-to-tray', () => {
+  hideMainWindowToTray();
+  return { ok: true };
+});
+
+ipcMain.handle('window-maximize-toggle', (evt) => {
+  const win = getSenderWindow(evt);
+  if (!win || win.isDestroyed()) return { ok: false, maximized: false };
+  if (win.isMaximized()) win.unmaximize();
+  else win.maximize();
+  return { ok: true, maximized: win.isMaximized() };
+});
+
+ipcMain.handle('window-is-maximized', (evt) => {
+  const win = getSenderWindow(evt);
+  return { ok: true, maximized: !!(win && !win.isDestroyed() && win.isMaximized()) };
+});
+
+ipcMain.handle('window-close', (evt) => {
+  const win = getSenderWindow(evt);
+  if (win && !win.isDestroyed()) win.close();
+  return { ok: true };
 });
 
 function createSplashWindow(iconPath) {
@@ -175,13 +318,14 @@ function createMainWindow(iconPath) {
   const preloadPath = path.join(__dirname, 'electron', 'preload.cjs');
 
   mainWindow = new BrowserWindow({
-    width: 1280,
-    height: 850,
-    minWidth: 1024,
-    minHeight: 700,
+    width: 1480,
+    height: 900,
+    minWidth: 1400,
+    minHeight: 760,
     title: 'NetSentinel Enterprise',
     icon: iconPath,
     show: false,
+    frame: false,
     autoHideMenuBar: true,
     backgroundColor: '#020617',
     webPreferences: {
@@ -224,12 +368,20 @@ function createMainWindow(iconPath) {
       mainWindow.focus();
     }
   }, 950);
+
+  mainWindow.on('close', (event) => {
+    if (isQuitting) return;
+    event.preventDefault();
+    hardShutdown('main-window-close');
+  });
 }
 
 app.whenReady().then(async () => {
+  if (!gotSingleInstanceLock) return;
+
   const adminState = ensureAdminOrPrompt();
   if (adminState === 'relaunching') {
-    app.quit();
+    hardShutdown('relaunching-elevated');
     return;
   }
 
@@ -259,17 +411,35 @@ app.whenReady().then(async () => {
 
   createSplashWindow(iconPath);
   createMainWindow(iconPath);
+  createTray(iconPath);
 
   app.on('activate', () => {
-    if (BrowserWindow.getAllWindows().length === 0) {
+    if (!mainWindow || mainWindow.isDestroyed()) {
       createMainWindow(iconPath);
+    } else {
+      showMainWindow();
     }
   });
 });
 
 app.on('window-all-closed', () => {
-  telemetry.stopPacketCapture();
+  // Hidden-to-tray keeps the BrowserWindow alive — only quit when truly closing
+  if (isQuitting) return;
   if (process.platform !== 'darwin') {
-    app.quit();
+    hardShutdown('window-all-closed');
   }
+});
+
+app.on('before-quit', () => {
+  isQuitting = true;
+  try {
+    telemetry.stopPacketCapture();
+  } catch (_) {}
+});
+
+app.on('will-quit', () => {
+  isQuitting = true;
+  try {
+    telemetry.stopPacketCapture();
+  } catch (_) {}
 });

@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
-import { X, ShieldAlert, Trash2, Plus, Lock, AlertTriangle } from 'lucide-react';
+import { X, ShieldAlert, Trash2, Plus, Lock, AlertTriangle, RotateCcw } from 'lucide-react';
 import { BlacklistedIpItem } from '../types/network';
+import { normalizeIpv4 } from '../utils/ip';
 
 interface BlacklistManagerModalProps {
   isOpen: boolean;
@@ -8,6 +9,7 @@ interface BlacklistManagerModalProps {
   blacklistedIps: BlacklistedIpItem[];
   onUnblockIp: (ip: string) => void;
   onAddBlockIp: (ip: string, reason: string) => void;
+  onResetBlacklist: () => void | Promise<void>;
 }
 
 export const BlacklistManagerModal: React.FC<BlacklistManagerModalProps> = ({
@@ -16,16 +18,24 @@ export const BlacklistManagerModal: React.FC<BlacklistManagerModalProps> = ({
   blacklistedIps,
   onUnblockIp,
   onAddBlockIp,
+  onResetBlacklist,
 }) => {
   const [manualIp, setManualIp] = useState('');
   const [manualReason, setManualReason] = useState('');
+  const [isResetting, setIsResetting] = useState(false);
+  const [ipError, setIpError] = useState<string | null>(null);
 
   if (!isOpen) return null;
 
   const handleAddSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!manualIp.trim()) return;
-    onAddBlockIp(manualIp.trim(), manualReason.trim() || 'Manual Security Block');
+    const safeIp = normalizeIpv4(manualIp);
+    if (!safeIp) {
+      setIpError('Enter a valid IPv4 address (e.g. 185.220.101.5)');
+      return;
+    }
+    setIpError(null);
+    onAddBlockIp(safeIp, manualReason.trim().slice(0, 120) || 'Manual Security Block');
     setManualIp('');
     setManualReason('');
   };
@@ -60,14 +70,18 @@ export const BlacklistManagerModal: React.FC<BlacklistManagerModalProps> = ({
         </div>
 
         {/* Manual Add Block Form */}
-        <form onSubmit={handleAddSubmit} className="p-4 border-b border-slate-800/80 bg-slate-950/50 flex flex-col sm:flex-row gap-2">
+        <form onSubmit={handleAddSubmit} className="p-4 border-b border-slate-800/80 bg-slate-950/50 flex flex-col gap-2">
+          <div className="flex flex-col sm:flex-row gap-2">
           <div className="relative flex-1">
             <Lock className="w-4 h-4 absolute left-3 top-3 text-slate-500" />
             <input
               type="text"
               placeholder="IP Address (e.g. 185.220.101.5)"
               value={manualIp}
-              onChange={(e) => setManualIp(e.target.value)}
+              onChange={(e) => {
+                setManualIp(e.target.value);
+                if (ipError) setIpError(null);
+              }}
               className="w-full pl-9 pr-3 py-2 text-xs font-mono rounded-xl bg-slate-900 border border-slate-700 text-slate-100 placeholder-slate-500 focus:outline-none focus:border-rose-500 transition-all"
               required
             />
@@ -78,6 +92,7 @@ export const BlacklistManagerModal: React.FC<BlacklistManagerModalProps> = ({
               placeholder="Reason (Optional)"
               value={manualReason}
               onChange={(e) => setManualReason(e.target.value)}
+              maxLength={120}
               className="w-full px-3 py-2 text-xs font-mono rounded-xl bg-slate-900 border border-slate-700 text-slate-100 placeholder-slate-500 focus:outline-none focus:border-rose-500 transition-all"
             />
           </div>
@@ -88,6 +103,8 @@ export const BlacklistManagerModal: React.FC<BlacklistManagerModalProps> = ({
             <Plus className="w-4 h-4" />
             <span>Block IP</span>
           </button>
+          </div>
+          {ipError && <p className="text-[11px] text-rose-400 font-mono">{ipError}</p>}
         </form>
 
         {/* Blacklisted IPs List */}
@@ -133,6 +150,30 @@ export const BlacklistManagerModal: React.FC<BlacklistManagerModalProps> = ({
               </div>
             ))
           )}
+        </div>
+
+        <div className="p-4 border-t border-slate-800 bg-slate-900/80 flex justify-between items-center gap-3 text-xs text-slate-400">
+          <span className="font-mono text-[11px]">Total Blocked: {blacklistedIps.length}</span>
+          <button
+            type="button"
+            disabled={isResetting || blacklistedIps.length === 0}
+            onClick={async () => {
+              const ok = window.confirm(
+                'Reset blacklist?\n\nAll blocked IPs will be unblocked (Windows Firewall rules removed).'
+              );
+              if (!ok) return;
+              setIsResetting(true);
+              try {
+                await onResetBlacklist();
+              } finally {
+                setIsResetting(false);
+              }
+            }}
+            className="px-3 py-1.5 rounded-xl text-xs font-semibold text-amber-200 hover:text-amber-100 bg-amber-950/40 hover:bg-amber-900/50 border border-amber-800/60 transition-colors flex items-center gap-1.5 disabled:opacity-40"
+          >
+            <RotateCcw className={`w-3.5 h-3.5 ${isResetting ? 'animate-spin' : ''}`} />
+            {isResetting ? 'Resetting…' : 'Reset List'}
+          </button>
         </div>
       </div>
     </div>

@@ -13,6 +13,11 @@ contextBridge.exposeInMainWorld('electronIPC', {
       'list-capture-adapters',
       'set-capture-adapter',
       'show-toast',
+      'window-minimize',
+      'window-minimize-to-tray',
+      'window-maximize-toggle',
+      'window-is-maximized',
+      'window-close',
     ]);
     if (!allowed.has(channel)) {
       return Promise.reject(new Error(`Blocked IPC channel: ${channel}`));

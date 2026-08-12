@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { X, ShieldCheck, Trash2, Plus, Search, CheckCircle, Shield, CheckCircle2, RotateCcw, ArrowUpRight } from 'lucide-react';
 import { TrustedEntry } from '../types/network';
+import { normalizeIpv4 } from '../utils/ip';
 
 export interface VerifiedNormalEntry {
   ip: string;
@@ -19,6 +20,8 @@ interface TrustedManagerModalProps {
   onAddVerifiedNormal: (ip: string, domain?: string) => void;
   onPromoteToBaseline: (ip: string) => void;
   onResetNormalStatus: (ip: string) => void;
+  onResetTrustedList: () => void;
+  onResetVerifiedList: () => void;
 }
 
 export const TrustedManagerModal: React.FC<TrustedManagerModalProps> = ({
@@ -31,6 +34,8 @@ export const TrustedManagerModal: React.FC<TrustedManagerModalProps> = ({
   onAddVerifiedNormal,
   onPromoteToBaseline,
   onResetNormalStatus,
+  onResetTrustedList,
+  onResetVerifiedList,
 }) => {
   const [activeSubTab, setActiveSubTab] = useState<'whitelist' | 'verifiedNormal'>('whitelist');
   const [newIpInput, setNewIpInput] = useState('');
@@ -38,21 +43,32 @@ export const TrustedManagerModal: React.FC<TrustedManagerModalProps> = ({
   const [newNormalIpInput, setNewNormalIpInput] = useState('');
   const [newNormalDomainInput, setNewNormalDomainInput] = useState('');
   const [searchTerm, setSearchTerm] = useState('');
+  const [formError, setFormError] = useState<string | null>(null);
 
   if (!isOpen) return null;
 
   const handleAddManualTrusted = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newIpInput.trim()) return;
-    onAddTrusted(newIpInput.trim(), newDomainInput.trim() || undefined);
+    const safeIp = normalizeIpv4(newIpInput);
+    if (!safeIp) {
+      setFormError('Enter a valid IPv4 address');
+      return;
+    }
+    setFormError(null);
+    onAddTrusted(safeIp, newDomainInput.trim() || undefined);
     setNewIpInput('');
     setNewDomainInput('');
   };
 
   const handleAddManualNormal = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newNormalIpInput.trim()) return;
-    onAddVerifiedNormal(newNormalIpInput.trim(), newNormalDomainInput.trim() || undefined);
+    const safeIp = normalizeIpv4(newNormalIpInput);
+    if (!safeIp) {
+      setFormError('Enter a valid IPv4 address');
+      return;
+    }
+    setFormError(null);
+    onAddVerifiedNormal(safeIp, newNormalDomainInput.trim() || undefined);
     setNewNormalIpInput('');
     setNewNormalDomainInput('');
   };
@@ -126,6 +142,9 @@ export const TrustedManagerModal: React.FC<TrustedManagerModalProps> = ({
             </button>
           </div>
         </div>
+        {formError && (
+          <p className="px-4 pb-2 text-[11px] text-rose-400 font-mono">{formError}</p>
+        )}
 
         {/* Tab Content 1: Trusted Baseline Whitelist Manager */}
         {activeSubTab === 'whitelist' && (
@@ -192,6 +211,11 @@ export const TrustedManagerModal: React.FC<TrustedManagerModalProps> = ({
                           <span className="font-mono font-bold text-slate-200">{item.ip}</span>
                           {item.domain && (
                             <span className="font-mono text-[11px] text-slate-400">({item.domain})</span>
+                          )}
+                          {item.note && (
+                            <span className="px-1.5 py-0.2 text-[9px] font-bold rounded bg-slate-800 text-slate-400 border border-slate-700">
+                              {item.note}
+                            </span>
                           )}
                         </div>
                         <span className="text-[10px] text-slate-500 font-mono">Added: {item.addedAt}</span>
@@ -318,17 +342,31 @@ export const TrustedManagerModal: React.FC<TrustedManagerModalProps> = ({
         )}
 
         {/* Modal Footer */}
-        <div className="p-4 border-t border-slate-800 bg-slate-900/80 flex justify-between items-center text-xs text-slate-400">
+        <div className="p-4 border-t border-slate-800 bg-slate-900/80 flex justify-between items-center gap-3 text-xs text-slate-400">
           <span className="font-mono text-[11px]">
             {activeSubTab === 'whitelist'
               ? `Total Whitelisted: ${trustedList.length} Entries`
               : `Total Verified Normal: ${verifiedNormalList.length} Sessions`}
           </span>
           <button
-            onClick={onClose}
-            className="px-4 py-1.5 rounded-xl text-xs font-semibold bg-slate-800 text-slate-200 hover:bg-slate-700 transition-colors"
+            type="button"
+            onClick={() => {
+              if (activeSubTab === 'whitelist') {
+                const ok = window.confirm(
+                  'Reset Trusted Baseline list?\n\nUser-added trusted IPs will be removed. Built-in defaults (8.8.8.8, etc.) stay.'
+                );
+                if (ok) onResetTrustedList();
+              } else {
+                const ok = window.confirm(
+                  'Reset Verified Normal list?\n\nAll verified IPs will return to NEW (unless Trusted/Blocked).'
+                );
+                if (ok) onResetVerifiedList();
+              }
+            }}
+            className="px-3 py-1.5 rounded-xl text-xs font-semibold text-amber-200 hover:text-amber-100 bg-amber-950/40 hover:bg-amber-900/50 border border-amber-800/60 transition-colors flex items-center gap-1.5"
           >
-            Close Hub
+            <RotateCcw className="w-3.5 h-3.5" />
+            Reset List
           </button>
         </div>
       </div>

@@ -27,7 +27,15 @@ let preferredDeviceName = null;
 let currentDeviceName = null;
 let currentDeviceLabel = null;
 
-/** @type {Map<string, { packetsIn: number, packetsOut: number, bytesIn: number, bytesOut: number }>} */
+/** Soft-evict IPs with no packets for this long (delta math stays correct on reappear). */
+const CUMULATIVE_IDLE_TTL_MS = 15 * 60 * 1000;
+/** Hard cap so long-running capture cannot grow the map without bound. */
+const MAX_CUMULATIVE_IPS = 10000;
+
+/**
+ * Lifetime counters per remote IP (for interval deltas only — not UI history).
+ * @type {Map<string, { packetsIn: number, packetsOut: number, bytesIn: number, bytesOut: number, lastSeenMs: number }>}
+ */
 const cumulative = new Map();
 /** @type {Map<string, { packetsIn: number, packetsOut: number, bytesIn: number, bytesOut: number }>} */
 let lastSnapshot = new Map();
@@ -151,7 +159,7 @@ function addStat(ip, direction, byteLen) {
   if (!ip || ip === '0.0.0.0' || ip.startsWith('127.')) return;
   let row = cumulative.get(ip);
   if (!row) {
-    row = { packetsIn: 0, packetsOut: 0, bytesIn: 0, bytesOut: 0 };
+    row = { packetsIn: 0, packetsOut: 0, bytesIn: 0, bytesOut: 0, lastSeenMs: 0 };
     cumulative.set(ip, row);
   }
   if (direction === 'in') {
@@ -161,6 +169,37 @@ function addStat(ip, direction, byteLen) {
     row.packetsOut += 1;
     row.bytesOut += byteLen;
   }
+  row.lastSeenMs = Date.now();
+}
+
+/**
+ * Drop idle / excess IPs from both cumulative and lastSnapshot together.
+ * Safe for delta math: a reappearing IP starts at 0 and lastSnapshot has no prev → first interval counts correctly.
+ */
+function pruneCumulativeMaps(now = Date.now()) {
+  for (const [ip, row] of cumulative.entries()) {
+    if (now - (row.lastSeenMs || 0) > CUMULATIVE_IDLE_TTL_MS) {
+      cumulative.delete(ip);
+      lastSnapshot.delete(ip);
+    }
+  }
+
+  if (cumulative.size <= MAX_CUMULATIVE_IPS) return;
+
+  const ranked = [...cumulative.entries()].sort(
+    (a, b) => (a[1].lastSeenMs || 0) - (b[1].lastSeenMs || 0)
+  );
+  const excess = cumulative.size - MAX_CUMULATIVE_IPS;
+  for (let i = 0; i < excess; i++) {
+    const ip = ranked[i][0];
+    cumulative.delete(ip);
+    lastSnapshot.delete(ip);
+  }
+}
+
+function clearCumulativeMaps() {
+  cumulative.clear();
+  lastSnapshot.clear();
 }
 
 function parseIpv4Packet(buf, offset, totalLen) {
@@ -370,6 +409,7 @@ function stopCapture() {
   started = false;
   currentDeviceName = null;
   currentDeviceLabel = null;
+  clearCumulativeMaps();
 }
 
 function getCaptureMode() {
@@ -437,6 +477,7 @@ function getCaptureStatus() {
     device: currentDeviceLabel,
     deviceName: currentDeviceName,
     preferredDeviceName,
+    cumulativeIpCount: cumulative.size,
   };
 }
 
@@ -462,8 +503,18 @@ function takeIntervalStats() {
     }
   }
 
+  pruneCumulativeMaps();
+
   lastSnapshot = new Map(
-    [...cumulative.entries()].map(([ip, v]) => [ip, { ...v }])
+    [...cumulative.entries()].map(([ip, v]) => [
+      ip,
+      {
+        packetsIn: v.packetsIn,
+        packetsOut: v.packetsOut,
+        bytesIn: v.bytesIn,
+        bytesOut: v.bytesOut,
+      },
+    ])
   );
 
   return delta;

@@ -31,7 +31,7 @@ export interface AnomalyEvent {
   id: string;
   timestamp: string;
   ip: string;
-  type: 'NEW_IP' | 'TRAFFIC_SPIKE' | 'SUSPICIOUS_PORT' | 'BLACKLISTED_GEO';
+  type: 'NEW_IP' | 'TRAFFIC_SPIKE' | 'SUSPICIOUS_PORT';
   severity: 'low' | 'medium' | 'high';
   message: string;
   resolved: boolean;
@@ -63,15 +63,11 @@ export interface GeoNode {
   lng: number;
 }
 
-export interface QuotaConfig {
-  dailyLimitBytes: number; // e.g. 10 * 1024 * 1024 * 1024 (10GB)
-  monthlyLimitBytes: number; // e.g. 100 * 1024 * 1024 * 1024 (100GB)
-  warningThresholdPercent: number; // e.g. 80
-}
-
 export interface MonitoringConfig {
   isMonitoring: boolean;
   spikeThresholdPacketsPerSec: number;
+  /** Aggregate chart pkts/s that records a History snapshot */
+  historySpikePacketsPerSec: number;
   notifyOnNewIp: boolean;
   autoBlockSuspicious: boolean;
   refreshIntervalMs: number;
@@ -84,6 +80,31 @@ export interface BlacklistedIpItem {
   ip: string;
   reason: string;
   blockedAt: number;
+}
+
+/** Snapshot captured around a traffic spike for History tab forensics. */
+export interface SpikeHistoryEntry {
+  id: string;
+  timestamp: string;
+  atMs: number;
+  packetsIn: number;
+  packetsOut: number;
+  bytesSec: number;
+  reason: string;
+  topIps: Array<{
+    ip: string;
+    domain?: string;
+    country: string;
+    packets: number;
+    bytes: number;
+    processHint?: string;
+  }>;
+  topProcesses: Array<{
+    processName: string;
+    packets: number;
+    bytes: number;
+    iconType: ProcessTrafficPoint['iconType'];
+  }>;
 }
 
 export interface GroupedProcess {

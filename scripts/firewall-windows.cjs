@@ -1,7 +1,7 @@
-const { exec } = require('child_process');
+const { execFile } = require('child_process');
 const util = require('util');
 
-const execAsync = util.promisify(exec);
+const execFileAsync = util.promisify(execFile);
 
 function ruleNameOut(ip) {
   return `NetSentinel Block OUT ${ip}`;
@@ -11,18 +11,33 @@ function ruleNameIn(ip) {
 }
 
 function assertIpv4(ip) {
-  if (!/^\d{1,3}(\.\d{1,3}){3}$/.test(ip)) {
+  if (typeof ip !== 'string' || !/^\d{1,3}(\.\d{1,3}){3}$/.test(ip)) {
     throw new Error(`Invalid IPv4 address: ${ip}`);
   }
   const parts = ip.split('.').map((n) => Number(n));
-  if (parts.some((n) => n < 0 || n > 255)) {
+  if (parts.some((n) => !Number.isInteger(n) || n < 0 || n > 255)) {
     throw new Error(`Invalid IPv4 address: ${ip}`);
   }
   return ip;
 }
 
+/** Keep netsh description free of shell/control metacharacters (execFile still benefits). */
+function sanitizeReason(reason) {
+  const raw = String(reason || 'NetSentinel block').slice(0, 120);
+  return raw.replace(/[^\w\s.\-:/()#,]/g, '').trim() || 'NetSentinel block';
+}
+
+async function runNetsh(args) {
+  return execFileAsync('netsh', args, {
+    timeout: 8000,
+    windowsHide: true,
+    encoding: 'utf8',
+  });
+}
+
 async function firewallBlockIp(ip, reason = 'NetSentinel block') {
   const safeIp = assertIpv4(ip);
+  const safeReason = sanitizeReason(reason);
   const outName = ruleNameOut(safeIp);
   const inName = ruleNameIn(safeIp);
 
@@ -30,14 +45,30 @@ async function firewallBlockIp(ip, reason = 'NetSentinel block') {
   await firewallUnblockIp(safeIp).catch(() => {});
 
   try {
-    await execAsync(
-      `netsh advfirewall firewall add rule name="${outName}" dir=out action=block remoteip=${safeIp} enable=yes description="${reason.replace(/"/g, '')}"`,
-      { timeout: 8000, windowsHide: true }
-    );
-    await execAsync(
-      `netsh advfirewall firewall add rule name="${inName}" dir=in action=block remoteip=${safeIp} enable=yes description="${reason.replace(/"/g, '')}"`,
-      { timeout: 8000, windowsHide: true }
-    );
+    await runNetsh([
+      'advfirewall',
+      'firewall',
+      'add',
+      'rule',
+      `name=${outName}`,
+      'dir=out',
+      'action=block',
+      `remoteip=${safeIp}`,
+      'enable=yes',
+      `description=${safeReason}`,
+    ]);
+    await runNetsh([
+      'advfirewall',
+      'firewall',
+      'add',
+      'rule',
+      `name=${inName}`,
+      'dir=in',
+      'action=block',
+      `remoteip=${safeIp}`,
+      'enable=yes',
+      `description=${safeReason}`,
+    ]);
     return { ok: true, ip: safeIp, elevated: true };
   } catch (err) {
     const msg = err?.message || String(err);
@@ -59,10 +90,7 @@ async function firewallUnblockIp(ip) {
 
   for (const name of [ruleNameOut(safeIp), ruleNameIn(safeIp)]) {
     try {
-      await execAsync(`netsh advfirewall firewall delete rule name="${name}"`, {
-        timeout: 8000,
-        windowsHide: true,
-      });
+      await runNetsh(['advfirewall', 'firewall', 'delete', 'rule', `name=${name}`]);
     } catch (err) {
       // delete returns error if rule missing — ignore benign cases
       const msg = err?.message || String(err);
@@ -89,4 +117,6 @@ async function firewallUnblockIp(ip) {
 module.exports = {
   firewallBlockIp,
   firewallUnblockIp,
+  assertIpv4,
+  sanitizeReason,
 };

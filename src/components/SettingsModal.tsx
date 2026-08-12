@@ -1,12 +1,14 @@
 import React, { useState, useEffect } from 'react';
-import { X, Sliders, Bell, Cpu, ShieldCheck, Globe, RefreshCw, HardDrive, ChevronDown } from 'lucide-react';
+import { X, Sliders, Bell, Cpu, ShieldCheck, Globe, RefreshCw, HardDrive, ChevronDown, RotateCcw, History } from 'lucide-react';
 import { MonitoringConfig } from '../types/network';
+import { getElectronIpc } from '../utils/electronIpc';
 
 interface SettingsModalProps {
   isOpen: boolean;
   onClose: () => void;
   config: MonitoringConfig;
   onSaveConfig: (newConfig: MonitoringConfig) => void;
+  onResetToDefaults: () => void | Promise<void>;
 }
 
 export const SettingsModal: React.FC<SettingsModalProps> = ({
@@ -14,8 +16,13 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   onClose,
   config,
   onSaveConfig,
+  onResetToDefaults,
 }) => {
+  const [isResetting, setIsResetting] = useState(false);
   const [spikeThreshold, setSpikeThreshold] = useState(config.spikeThresholdPacketsPerSec);
+  const [historySpikeThreshold, setHistorySpikeThreshold] = useState(
+    config.historySpikePacketsPerSec ?? 200
+  );
   const [notifyNewIp, setNotifyNewIp] = useState(config.notifyOnNewIp);
   const [autoBlock, setAutoBlock] = useState(config.autoBlockSuspicious);
   const [dailyQuotaValue, setDailyQuotaValue] = useState(config.dailyQuotaValue || 10);
@@ -28,25 +35,17 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   const [geoIpError, setGeoIpError] = useState<string | null>(null);
   const [geoIpActive, setGeoIpActive] = useState(false);
 
-  const getIpc = () => {
-    try {
-      if (typeof window === 'undefined') return null;
-      return window.electronIPC || null;
-    } catch {
-      return null;
-    }
-  };
-
   useEffect(() => {
     if (!isOpen) return;
     setSpikeThreshold(config.spikeThresholdPacketsPerSec);
+    setHistorySpikeThreshold(config.historySpikePacketsPerSec ?? 200);
     setNotifyNewIp(config.notifyOnNewIp);
     setAutoBlock(config.autoBlockSuspicious);
     setDailyQuotaValue(config.dailyQuotaValue || 10);
     setDailyQuotaUnit(config.dailyQuotaUnit || 'GB');
     setActiveInterface(config.activeInterface || '');
 
-    const ipc = getIpc();
+    const ipc = getElectronIpc();
     if (!ipc) {
       setLastGeoIpUpdated('GeoIP unavailable (not running in Electron)');
       return;
@@ -72,7 +71,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   }, [isOpen, config]);
 
   const handleUpdateGeoIp = async () => {
-    const ipc = getIpc();
+    const ipc = getElectronIpc();
     if (!ipc) {
       setGeoIpError('Electron IPC unavailable');
       return;
@@ -99,11 +98,12 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   const handleSave = () => {
     onSaveConfig({
       ...config,
-      spikeThresholdPacketsPerSec: spikeThreshold,
+      spikeThresholdPacketsPerSec: Math.max(1, Math.floor(spikeThreshold) || 40),
+      historySpikePacketsPerSec: Math.max(1, Math.floor(historySpikeThreshold) || 200),
       notifyOnNewIp: notifyNewIp,
       autoBlockSuspicious: autoBlock,
       activeInterface: activeInterface || config.activeInterface,
-      dailyQuotaValue: Math.max(1, dailyQuotaValue),
+      dailyQuotaValue: Math.max(1, dailyQuotaValue || 1),
       dailyQuotaUnit: dailyQuotaUnit,
     });
     onClose();
@@ -144,9 +144,11 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
               </span>
             </div>
 
-            <div className="flex items-center justify-between text-[11px] font-mono">
+            <div className="flex flex-col gap-1 text-[11px] font-mono">
               <span className="text-slate-400">Last Updated Date:</span>
-              <span className="text-emerald-400 font-bold text-right max-w-[60%]">{lastGeoIpUpdated}</span>
+              <span className="text-emerald-400 font-bold whitespace-nowrap overflow-x-auto">
+                {lastGeoIpUpdated}
+              </span>
             </div>
 
             {geoIpError && (
@@ -202,10 +204,14 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
               <input
                 type="number"
                 min="1"
-                step="0.1"
+                step="any"
+                inputMode="decimal"
                 value={dailyQuotaValue}
-                onChange={(e) => setDailyQuotaValue(Number(e.target.value))}
-                className="flex-1 px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-xs font-mono font-bold text-amber-300 focus:outline-none focus:border-amber-500/50"
+                onChange={(e) => {
+                  const n = Number(e.target.value);
+                  setDailyQuotaValue(Number.isFinite(n) ? n : 1);
+                }}
+                className="no-spinner flex-1 px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-xs font-mono font-bold text-amber-300 focus:outline-none focus:border-amber-500/50"
                 placeholder="Enter quota limit..."
               />
               <div className="relative">
@@ -227,25 +233,57 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
             </p>
           </div>
 
-          {/* SECTION 4: Traffic Spike Slider */}
+          {/* Traffic Spike — direct input */}
           <div>
-            <div className="flex justify-between items-center mb-1.5">
-              <label className="font-semibold text-slate-200 flex items-center gap-1.5">
-                <Cpu className="w-3.5 h-3.5 text-cyan-400" />
-                Traffic Spike Threshold
-              </label>
-              <span className="font-mono text-cyan-400 font-bold">{spikeThreshold} pkts/sec</span>
+            <label className="font-semibold text-slate-200 flex items-center gap-1.5 mb-1.5">
+              <Cpu className="w-3.5 h-3.5 text-cyan-400" />
+              Traffic Spike Threshold
+            </label>
+            <div className="flex items-center gap-2">
+              <input
+                type="number"
+                min="1"
+                max="100000"
+                step="1"
+                inputMode="numeric"
+                value={spikeThreshold}
+                onChange={(e) => {
+                  const n = Math.floor(Number(e.target.value));
+                  setSpikeThreshold(Number.isFinite(n) ? Math.max(1, n) : 1);
+                }}
+                className="no-spinner flex-1 px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-xs font-mono font-bold text-cyan-300 focus:outline-none focus:border-cyan-500/50"
+              />
+              <span className="text-[11px] font-mono text-slate-400 whitespace-nowrap shrink-0">pkts/sec</span>
             </div>
-            <input
-              type="range"
-              min="10"
-              max="150"
-              value={spikeThreshold}
-              onChange={(e) => setSpikeThreshold(Number(e.target.value))}
-              className="w-full h-1.5 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-cyan-400"
-            />
             <p className="text-[11px] text-slate-500 mt-1">
-              Triggers warning when an IP exceeds this packet rate in 1 second.
+              Triggers Anomaly warning when a single IP exceeds this packet rate in 1 second.
+            </p>
+          </div>
+
+          {/* History Spike — direct input */}
+          <div>
+            <label className="font-semibold text-slate-200 flex items-center gap-1.5 mb-1.5">
+              <History className="w-3.5 h-3.5 text-amber-400" />
+              History Spike Threshold
+            </label>
+            <div className="flex items-center gap-2">
+              <input
+                type="number"
+                min="1"
+                max="1000000"
+                step="1"
+                inputMode="numeric"
+                value={historySpikeThreshold}
+                onChange={(e) => {
+                  const n = Math.floor(Number(e.target.value));
+                  setHistorySpikeThreshold(Number.isFinite(n) ? Math.max(1, n) : 1);
+                }}
+                className="no-spinner flex-1 px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-xs font-mono font-bold text-amber-300 focus:outline-none focus:border-amber-500/50"
+              />
+              <span className="text-[11px] font-mono text-slate-400 whitespace-nowrap shrink-0">pkts/sec</span>
+            </div>
+            <p className="text-[11px] text-slate-500 mt-1">
+              Records a History snapshot when total chart traffic (all IPs) reaches this rate, or ~2.5× the recent average.
             </p>
           </div>
 
@@ -274,7 +312,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 Kernel Firewall Auto-Block
               </p>
               <p className="text-[11px] text-slate-500 mt-0.5">
-                Auto-add Windows Firewall block rules for suspicious IPs.
+                Auto-add Windows Firewall block rules for threat-heuristic suspicious IPs (not traffic spikes alone).
               </p>
             </div>
             <input
@@ -286,20 +324,47 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
           </div>
         </div>
 
-        {/* Footer with High-Visibility High-Contrast Save Button */}
-        <div className="p-4 border-t border-slate-800 bg-slate-900/90 flex justify-end items-center gap-3">
+        {/* Footer */}
+        <div className="p-4 border-t border-slate-800 bg-slate-900/90 flex justify-between items-center gap-3">
           <button
-            onClick={handleSave}
-            className="px-5 py-2 rounded-xl text-xs font-extrabold bg-cyan-400 hover:bg-cyan-300 text-slate-950 transition-all shadow-[0_0_15px_rgba(34,211,238,0.8)] border border-cyan-300 cursor-pointer"
+            type="button"
+            disabled={isResetting}
+            onClick={async () => {
+              const ok = window.confirm(
+                'Reset everything to defaults?\n\n' +
+                  '• Settings → factory defaults (toast/auto-block OFF)\n' +
+                  '• Verified / Trusted / Blocked → cleared (built-in trusted kept)\n' +
+                  '• Anomalies & traffic totals → cleared\n' +
+                  '• IPs will be re-learned as NEW\n\n' +
+                  'Firewall block rules will be removed for app-blocked IPs.'
+              );
+              if (!ok) return;
+              setIsResetting(true);
+              try {
+                await onResetToDefaults();
+              } finally {
+                setIsResetting(false);
+              }
+            }}
+            className="px-3 py-2 rounded-xl text-xs font-semibold text-amber-200 hover:text-amber-100 bg-amber-950/40 hover:bg-amber-900/50 transition-all border border-amber-800/60 disabled:opacity-50 flex items-center gap-1.5 cursor-pointer"
           >
-            Save Configuration
+            <RotateCcw className={`w-3.5 h-3.5 ${isResetting ? 'animate-spin' : ''}`} />
+            {isResetting ? 'Resetting…' : 'Reset All'}
           </button>
-          <button
-            onClick={onClose}
-            className="px-4 py-2 rounded-xl text-xs font-semibold text-slate-300 hover:text-white bg-slate-800/80 hover:bg-slate-700 transition-all border border-slate-700"
-          >
-            Cancel
-          </button>
+          <div className="flex items-center gap-3">
+            <button
+              onClick={handleSave}
+              className="px-5 py-2 rounded-xl text-xs font-extrabold bg-cyan-400 hover:bg-cyan-300 text-slate-950 transition-all shadow-[0_0_15px_rgba(34,211,238,0.8)] border border-cyan-300 cursor-pointer"
+            >
+              Save Configuration
+            </button>
+            <button
+              onClick={onClose}
+              className="px-4 py-2 rounded-xl text-xs font-semibold text-slate-300 hover:text-white bg-slate-800/80 hover:bg-slate-700 transition-all border border-slate-700"
+            >
+              Cancel
+            </button>
+          </div>
         </div>
       </div>
     </div>

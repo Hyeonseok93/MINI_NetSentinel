@@ -1,4 +1,4 @@
-const { exec } = require('child_process');
+const { execFile } = require('child_process');
 const util = require('util');
 const path = require('path');
 const fs = require('fs');
@@ -6,17 +6,14 @@ const crypto = require('crypto');
 const maxmind = require('maxmind');
 const npcapCapture = require('./npcap-capture.cjs');
 
-const execAsync = util.promisify(exec);
+const execFileAsync = util.promisify(execFile);
 
 const GEOIP_DB_FILENAME = 'GeoLite2-Country.mmdb';
+/** Only checksum-verified mirrors — unsigned fallbacks removed after audit. */
 const GEOIP_DOWNLOAD_URLS = [
   {
     url: 'https://cdn.jsdelivr.net/gh/Loyalsoldier/geoip@release/GeoLite2-Country.mmdb',
     sha256Url: 'https://cdn.jsdelivr.net/gh/Loyalsoldier/geoip@release/GeoLite2-Country.mmdb.sha256sum',
-  },
-  {
-    url: 'https://github.com/P3TERX/GeoLite.mmdb/raw/download/GeoLite2-Country.mmdb',
-    sha256Url: null,
   },
 ];
 
@@ -34,30 +31,33 @@ function isPrivateIp(ip) {
   );
 }
 
-function resolveDomain(ip) {
-  if (isPrivateIp(ip)) return 'router.home';
-  if (ip.startsWith('8.8.8')) return 'dns.google';
-  if (ip.startsWith('1.1.1')) return 'one.one.one.one';
-  if (ip.startsWith('142.250.') || ip.startsWith('172.217.')) return 'google.com';
-  if (ip.startsWith('13.107.') || ip.startsWith('20.198.') || ip.startsWith('52.')) return 'microsoft.com';
-  if (ip.startsWith('104.16.') || ip.startsWith('104.18.') || ip.startsWith('162.159.')) return 'cloudflare.com';
-  if (ip.startsWith('140.82.')) return 'github.com';
-  if (ip.startsWith('223.130.')) return 'naver.com';
-  return undefined;
-}
-
 function isSuspicious(ip, port) {
   return port === 4444 || port === 9001 || ip.startsWith('185.220.') || ip.startsWith('45.154.');
 }
 
-function isSafe(ip) {
-  return (
-    isPrivateIp(ip) ||
-    ip.startsWith('8.8.8.') ||
-    ip.startsWith('1.1.1.') ||
-    ip.startsWith('142.250.') ||
-    ip.startsWith('13.107.')
-  );
+/** Domain hints only — must NOT auto-trust / auto-verify sessions.
+ *  Strict: exact famous IPs (or tiny private LAN hint). No wide prefix guesses. */
+const FAMOUS_DOMAIN_BY_IP = Object.freeze({
+  '8.8.8.8': 'dns.google',
+  '8.8.4.4': 'dns.google',
+  '1.1.1.1': 'one.one.one.one',
+  '1.0.0.1': 'one.one.one.one',
+  '9.9.9.9': 'dns.quad9.net',
+  '149.112.112.112': 'dns.quad9.net',
+  '208.67.222.222': 'dns.opendns.com',
+  '208.67.220.220': 'dns.opendns.com',
+  // Built-in trusted defaults in the app
+  '192.168.1.1': 'router.home',
+  '192.168.0.1': 'router.home',
+  '192.168.219.1': 'router.home',
+});
+
+function resolveDomain(ip) {
+  if (!ip || typeof ip !== 'string') return undefined;
+  if (FAMOUS_DOMAIN_BY_IP[ip]) return FAMOUS_DOMAIN_BY_IP[ip];
+  // Private LAN only as a generic local hint — not a public "company" guess
+  if (isPrivateIp(ip)) return 'lan.local';
+  return undefined;
 }
 
 function resolveCandidateDbPaths(extraPaths = []) {
@@ -108,17 +108,18 @@ async function downloadGeoIpDatabase(targetPath) {
       }
 
       const digest = crypto.createHash('sha256').update(buffer).digest('hex');
-      if (mirror.sha256Url) {
-        const sumRes = await fetch(mirror.sha256Url, {
-          redirect: 'follow',
-          headers: { 'User-Agent': 'NetSentinel-Telemetry-Core' },
-        });
-        if (!sumRes.ok) throw new Error(`SHA256 fetch failed HTTP ${sumRes.status}`);
-        const expected = parseSha256Sum(await sumRes.text());
-        if (!expected) throw new Error('Could not parse SHA256 checksum file');
-        if (expected !== digest) {
-          throw new Error(`SHA256 mismatch (expected ${expected}, got ${digest})`);
-        }
+      if (!mirror.sha256Url) {
+        throw new Error(`Mirror missing SHA256 URL: ${mirror.url}`);
+      }
+      const sumRes = await fetch(mirror.sha256Url, {
+        redirect: 'follow',
+        headers: { 'User-Agent': 'NetSentinel-Telemetry-Core' },
+      });
+      if (!sumRes.ok) throw new Error(`SHA256 fetch failed HTTP ${sumRes.status}`);
+      const expected = parseSha256Sum(await sumRes.text());
+      if (!expected) throw new Error('Could not parse SHA256 checksum file');
+      if (expected !== digest) {
+        throw new Error(`SHA256 mismatch (expected ${expected}, got ${digest})`);
       }
 
       fs.writeFileSync(tmpPath, buffer);
@@ -241,10 +242,15 @@ function timezoneFallbackGeo() {
 async function discoverPublicIp() {
   // DNS-only discovery (not a third-party Geo API). Fails cleanly offline.
   try {
-    const { stdout } = await execAsync('nslookup myip.opendns.com resolver1.opendns.com', {
-      timeout: 2500,
-      windowsHide: true,
-    });
+    const { stdout } = await execFileAsync(
+      'nslookup',
+      ['myip.opendns.com', 'resolver1.opendns.com'],
+      {
+        timeout: 2500,
+        windowsHide: true,
+        encoding: 'utf8',
+      }
+    );
     const matches = [...String(stdout).matchAll(/Address:\s*([0-9.]+)/gi)];
     // Last Address line is typically the resolved public IP
     for (let i = matches.length - 1; i >= 0; i -= 1) {
@@ -259,8 +265,13 @@ function readPublicIpCache(cachePath) {
   try {
     if (!cachePath || !fs.existsSync(cachePath)) return null;
     const raw = JSON.parse(fs.readFileSync(cachePath, 'utf8'));
-    if (raw && typeof raw.ip === 'string' && /^\d{1,3}(\.\d{1,3}){3}$/.test(raw.ip)) {
-      return raw.ip;
+    if (raw && typeof raw.ip === 'string') {
+      const parts = raw.ip.split('.').map((n) => Number(n));
+      const ok =
+        /^\d{1,3}(\.\d{1,3}){3}$/.test(raw.ip) &&
+        parts.length === 4 &&
+        parts.every((n) => Number.isInteger(n) && n >= 0 && n <= 255);
+      if (ok) return raw.ip;
     }
   } catch (_) {}
   return null;
@@ -357,17 +368,29 @@ async function fetchTelemetryPayload() {
   const npcapDelta = captureMode === 'npcap' ? npcapCapture.takeIntervalStats() : new Map();
 
   try {
-    const { stdout: netstatOutput } = await execAsync('netstat -n -o -p TCP', {
-      timeout: 2000,
-      maxBuffer: 10 * 1024 * 1024,
-    });
+    const { stdout: netstatOutput } = await execFileAsync(
+      'netstat',
+      ['-n', '-o', '-p', 'TCP'],
+      {
+        timeout: 2000,
+        maxBuffer: 10 * 1024 * 1024,
+        windowsHide: true,
+        encoding: 'utf8',
+      }
+    );
 
     const pidMap = new Map();
     try {
-      const { stdout: tasklistOutput } = await execAsync('tasklist /FO CSV /NH', {
-        timeout: 2000,
-        maxBuffer: 5 * 1024 * 1024,
-      });
+      const { stdout: tasklistOutput } = await execFileAsync(
+        'tasklist',
+        ['/FO', 'CSV', '/NH'],
+        {
+          timeout: 2000,
+          maxBuffer: 5 * 1024 * 1024,
+          windowsHide: true,
+          encoding: 'utf8',
+        }
+      );
       for (const tLine of tasklistOutput.split('\n')) {
         const matches = tLine.trim().split(/","/);
         if (matches.length >= 2) {
@@ -436,10 +459,10 @@ async function fetchTelemetryPayload() {
           bytes_out: bOut,
           total_bytes: bIn + bOut,
           last_seen: timeStr,
-          status: isSuspicious(ip, port) ? 'suspicious' : isSafe(ip) ? 'normal' : 'new',
+          status: isSuspicious(ip, port) ? 'suspicious' : 'new',
           protocol: 'TCP',
           port,
-          is_baseline: isSafe(ip),
+          is_baseline: false,
         });
       } else {
         const existing = sessionsMap.get(ip);
