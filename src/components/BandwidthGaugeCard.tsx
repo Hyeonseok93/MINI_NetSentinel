@@ -128,7 +128,7 @@ export const BandwidthGaugeCard: React.FC<BandwidthGaugeCardProps> = ({ processe
           <span className="text-[10px] text-slate-500 font-mono">Ranked by Volume</span>
         </div>
 
-        <div className="space-y-3 flex-1 flex flex-col justify-around">
+        <div className="flex-1 flex flex-col gap-2.5 justify-between py-1">
           {topProcesses.length === 0 ? (
             <div className="py-8 text-center text-slate-500 font-mono text-xs">
               No active process traffic recorded.
