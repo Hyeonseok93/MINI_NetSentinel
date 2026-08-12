@@ -93,43 +93,46 @@ export const EnterpriseHubCard: React.FC<EnterpriseHubCardProps> = ({
   const [geoSortOption, setGeoSortOption] = useState<GeoSortOptionKey>('ips-desc');
 
   // 1. IP Sessions Filter & Sort
-  const filteredSessions = sessions
-    .filter((s) => {
-      const matchSearch =
-        s.ip.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        (s.domain && s.domain.toLowerCase().includes(searchTerm.toLowerCase())) ||
-        s.country.toLowerCase().includes(searchTerm.toLowerCase());
+  const filteredSessions = React.useMemo(() => {
+    return sessions
+      .filter((s) => {
+        const matchSearch =
+          s.ip.toLowerCase().includes(searchTerm.toLowerCase()) ||
+          (s.domain && s.domain.toLowerCase().includes(searchTerm.toLowerCase())) ||
+          s.country.toLowerCase().includes(searchTerm.toLowerCase());
 
-      if (!matchSearch) return false;
+        const matchType =
+          filterType === 'all'
+            ? true
+            : filterType === 'baseline'
+            ? s.isBaseline
+            : s.status === filterType;
 
-      if (filterType === 'new') return s.status === 'new';
-      if (filterType === 'normal') return s.status === 'normal' && !s.isBaseline;
-      if (filterType === 'suspicious') return s.status === 'suspicious';
-      if (filterType === 'baseline') return s.isBaseline;
-      return true;
-    })
-    .sort((a, b) => {
-      switch (sortOption) {
-        case 'packets-desc':
-          return b.totalPackets - a.totalPackets;
-        case 'packets-asc':
-          return a.totalPackets - b.totalPackets;
-        case 'bytes-desc':
-          return b.totalBytes - a.totalBytes;
-        case 'bytes-asc':
-          return a.totalBytes - b.totalBytes;
-        case 'ip-asc':
-          return a.ip.localeCompare(b.ip, undefined, { numeric: true });
-        case 'ip-desc':
-          return b.ip.localeCompare(a.ip, undefined, { numeric: true });
-        case 'domain-asc':
-          return (a.domain || 'zzz').localeCompare(b.domain || 'zzz');
-        case 'recent-desc':
-          return (b.lastSeen || '').localeCompare(a.lastSeen || '');
-        default:
-          return b.totalPackets - a.totalPackets;
-      }
-    });
+        return matchSearch && matchType;
+      })
+      .sort((a, b) => {
+        switch (sortOption) {
+          case 'packets-desc':
+            return b.totalPackets - a.totalPackets;
+          case 'packets-asc':
+            return a.totalPackets - b.totalPackets;
+          case 'bytes-desc':
+            return b.totalBytes - a.totalBytes;
+          case 'bytes-asc':
+            return a.totalBytes - b.totalBytes;
+          case 'ip-asc':
+            return a.ip.localeCompare(b.ip);
+          case 'ip-desc':
+            return b.ip.localeCompare(a.ip);
+          case 'domain-asc':
+            return (a.domain || '').localeCompare(b.domain || '');
+          case 'recent-desc':
+            return (b.lastSeen || '').localeCompare(a.lastSeen || '');
+          default:
+            return b.totalPackets - a.totalPackets;
+        }
+      });
+  }, [sessions, searchTerm, filterType, sortOption]);
 
   // 2. App Breakdown Grouped Aggregation
   const liveAppNames = new Set(processes.map((p) => p.processName));

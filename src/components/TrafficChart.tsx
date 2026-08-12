@@ -40,27 +40,25 @@ export const TrafficChart: React.FC<TrafficChartProps> = ({ data }) => {
   const totalCollectedSec = data ? data.length : 0;
   const currentConfig = TIME_RANGES.find((r) => r.key === timeRange) || TIME_RANGES[0];
 
-  // 100% True Real-Time Timestamp Cutoff Filter (Zero Gap & Zero Error)
-  // Filters data strictly matching [Now - requiredSeconds] => [Now]
+  // Slice by wall-clock window. Depend on length + latest sample so in-place
+  // engine mutations (same array ref) still invalidate this memo.
+  const latestSample = data.length > 0 ? data[data.length - 1] : null;
   const chartData = useMemo(() => {
     if (!data || data.length === 0) return [];
 
     const reqSec = currentConfig.requiredSeconds;
-    
-    // Parse timestamp of the latest point to establish exact cutoff threshold
     const lastPoint = data[data.length - 1];
     if (!lastPoint || !lastPoint.time) return data.slice(-reqSec);
 
-    // Convert time string "오전/오후 HH:MM:SS" into seconds timestamp
     const parseTimeToSec = (tStr: string): number => {
       try {
-        const cleaned = tStr.replace(/오전|오후/g, '').trim();
+        const cleaned = tStr.replace(/오전|오후|AM|PM/gi, '').trim();
         const parts = cleaned.split(':').map((p) => parseInt(p, 10));
         let hrs = parts[0] || 0;
-        if (tStr.includes('오후') && hrs < 12) hrs += 12;
-        if (tStr.includes('오전') && hrs === 12) hrs = 0;
+        if ((/오후|PM/i).test(tStr) && hrs < 12) hrs += 12;
+        if ((/오전|AM/i).test(tStr) && hrs === 12) hrs = 0;
         return hrs * 3600 + (parts[1] || 0) * 60 + (parts[2] || 0);
-      } catch (e) {
+      } catch {
         return 0;
       }
     };
@@ -69,15 +67,20 @@ export const TrafficChart: React.FC<TrafficChartProps> = ({ data }) => {
     if (latestSec === 0) return data.slice(-reqSec);
 
     const cutoffSec = latestSec - reqSec;
-
-    // Strict Timestamp Filter: Keep only points within [LatestTime - requiredSeconds, LatestTime]
     const filteredByTime = data.filter((item) => {
       const pSec = parseTimeToSec(item.time);
       return pSec >= cutoffSec && pSec <= latestSec;
     });
 
     return filteredByTime.length > 0 ? filteredByTime : data.slice(-reqSec);
-  }, [data, currentConfig]);
+  }, [
+    data,
+    data.length,
+    latestSample?.time,
+    latestSample?.packetsIn,
+    latestSample?.packetsOut,
+    currentConfig,
+  ]);
 
   return (
     <div className="glass-panel p-5 rounded-2xl border border-slate-800/80 mb-6">

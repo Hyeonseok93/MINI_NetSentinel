@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { X, Sliders, Bell, Cpu, ShieldCheck, Globe, RefreshCw, HardDrive, ChevronDown } from 'lucide-react';
 import { MonitoringConfig } from '../types/network';
 
@@ -20,24 +20,78 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   const [autoBlock, setAutoBlock] = useState(config.autoBlockSuspicious);
   const [dailyQuotaValue, setDailyQuotaValue] = useState(config.dailyQuotaValue || 10);
   const [dailyQuotaUnit, setDailyQuotaUnit] = useState<'KB' | 'MB' | 'GB' | 'TB'>(config.dailyQuotaUnit || 'GB');
+  const [activeInterface, setActiveInterface] = useState(config.activeInterface || '');
+  const [adapters, setAdapters] = useState<Array<{ name: string; description: string }>>([]);
 
   const [isUpdatingGeoIp, setIsUpdatingGeoIp] = useState(false);
-  const [lastGeoIpUpdated, setLastGeoIpUpdated] = useState('2026-08-10 23:23:31 (Up-to-date)');
+  const [lastGeoIpUpdated, setLastGeoIpUpdated] = useState('Checking GeoIP DB...');
+  const [geoIpError, setGeoIpError] = useState<string | null>(null);
+  const [geoIpActive, setGeoIpActive] = useState(false);
 
-  const handleUpdateGeoIp = () => {
+  const getIpc = () => {
+    try {
+      if (typeof window === 'undefined') return null;
+      return window.electronIPC || null;
+    } catch {
+      return null;
+    }
+  };
+
+  useEffect(() => {
+    if (!isOpen) return;
+    setSpikeThreshold(config.spikeThresholdPacketsPerSec);
+    setNotifyNewIp(config.notifyOnNewIp);
+    setAutoBlock(config.autoBlockSuspicious);
+    setDailyQuotaValue(config.dailyQuotaValue || 10);
+    setDailyQuotaUnit(config.dailyQuotaUnit || 'GB');
+    setActiveInterface(config.activeInterface || '');
+
+    const ipc = getIpc();
+    if (!ipc) {
+      setLastGeoIpUpdated('GeoIP unavailable (not running in Electron)');
+      return;
+    }
+    ipc
+      .invoke('geoip-status')
+      .then((status: { label?: string; active?: boolean }) => {
+        setLastGeoIpUpdated(status?.label || 'Unknown');
+        setGeoIpActive(Boolean(status?.active));
+        setGeoIpError(status?.active ? null : 'DB not loaded');
+      })
+      .catch(() => setLastGeoIpUpdated('Failed to read GeoIP status'));
+
+    ipc
+      .invoke('list-capture-adapters')
+      .then((list: Array<{ name: string; description: string }>) => {
+        if (Array.isArray(list)) {
+          setAdapters(list);
+          setActiveInterface((current) => current || list[0]?.name || '');
+        }
+      })
+      .catch(() => setAdapters([]));
+  }, [isOpen, config]);
+
+  const handleUpdateGeoIp = async () => {
+    const ipc = getIpc();
+    if (!ipc) {
+      setGeoIpError('Electron IPC unavailable');
+      return;
+    }
+
     setIsUpdatingGeoIp(true);
-    setTimeout(() => {
+    setGeoIpError(null);
+    try {
+      const status = await ipc.invoke('geoip-update');
+      setLastGeoIpUpdated(status?.label || 'Updated');
+      setGeoIpActive(Boolean(status?.active));
+      if (!status?.active) {
+        setGeoIpError('Download finished but DB failed to open');
+      }
+    } catch (err: any) {
+      setGeoIpError(err?.message || 'GeoIP download failed');
+    } finally {
       setIsUpdatingGeoIp(false);
-      const nowStr = new Date().toLocaleString([], {
-        year: 'numeric',
-        month: '2-digit',
-        day: '2-digit',
-        hour: '2-digit',
-        minute: '2-digit',
-        second: '2-digit',
-      });
-      setLastGeoIpUpdated(`${nowStr} (Up-to-date)`);
-    }, 1500);
+    }
   };
 
   if (!isOpen) return null;
@@ -48,6 +102,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
       spikeThresholdPacketsPerSec: spikeThreshold,
       notifyOnNewIp: notifyNewIp,
       autoBlockSuspicious: autoBlock,
+      activeInterface: activeInterface || config.activeInterface,
       dailyQuotaValue: Math.max(1, dailyQuotaValue),
       dailyQuotaUnit: dailyQuotaUnit,
     });
@@ -80,20 +135,28 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 <Globe className="w-3.5 h-3.5 text-emerald-400" />
                 <span>MaxMind GeoLite2 DB Engine</span>
               </div>
-              <span className="px-2 py-0.5 text-[9px] font-mono font-bold rounded-full bg-emerald-950 text-emerald-300 border border-emerald-800">
-                ACTIVE
+              <span className={`px-2 py-0.5 text-[9px] font-mono font-bold rounded-full border ${
+                geoIpActive
+                  ? 'bg-emerald-950 text-emerald-300 border-emerald-800'
+                  : 'bg-rose-950 text-rose-300 border-rose-800'
+              }`}>
+                {geoIpActive ? 'ACTIVE' : 'INACTIVE'}
               </span>
             </div>
 
             <div className="flex items-center justify-between text-[11px] font-mono">
               <span className="text-slate-400">Last Updated Date:</span>
-              <span className="text-emerald-400 font-bold">{lastGeoIpUpdated}</span>
+              <span className="text-emerald-400 font-bold text-right max-w-[60%]">{lastGeoIpUpdated}</span>
             </div>
+
+            {geoIpError && (
+              <p className="text-[10px] text-amber-400 font-mono">{geoIpError}</p>
+            )}
 
             <button
               onClick={handleUpdateGeoIp}
               disabled={isUpdatingGeoIp}
-              className="w-full py-2 px-3 rounded-xl bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 border border-emerald-500/40 font-bold transition-all flex items-center justify-center gap-2 text-xs"
+              className="w-full py-2 px-3 rounded-xl bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 border border-emerald-500/40 font-bold transition-all flex items-center justify-center gap-2 text-xs disabled:opacity-60"
             >
               <RefreshCw className={`w-3.5 h-3.5 text-emerald-400 ${isUpdatingGeoIp ? 'animate-spin' : ''}`} />
               <span>{isUpdatingGeoIp ? 'Downloading Latest DB...' : '🔄 Update GeoIP DB Now'}</span>
@@ -103,23 +166,30 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
           {/* SECTION 2: Adapter Interface */}
           <div>
             <label className="font-semibold text-slate-200 block mb-1.5">
-              Active Network Adapter
+              Active Network Adapter (Npcap)
             </label>
             <div className="relative">
               <select
-                defaultValue={config.activeInterface}
+                value={activeInterface}
+                onChange={(e) => setActiveInterface(e.target.value)}
                 className="w-full pl-3 pr-9 py-2 bg-slate-900 border border-slate-800 rounded-xl text-xs text-slate-200 focus:outline-none focus:border-cyan-500/50 font-mono appearance-none cursor-pointer"
               >
-                <option value="Ethernet 0 (Intel(R) Ethernet Connection)">
-                  Ethernet 0 (Intel(R) Ethernet Connection)
-                </option>
-                <option value="Wi-Fi (Realtek 8822CE Wireless LAN)">
-                  Wi-Fi (Realtek 8822CE Wireless LAN)
-                </option>
-                <option value="Npcap Loopback Adapter">Npcap Loopback Adapter</option>
+                {adapters.length === 0 && (
+                  <option value={activeInterface || ''}>
+                    {activeInterface || 'No Npcap adapters detected'}
+                  </option>
+                )}
+                {adapters.map((adapter) => (
+                  <option key={adapter.name} value={adapter.name}>
+                    {adapter.description}
+                  </option>
+                ))}
               </select>
               <ChevronDown className="w-4 h-4 text-slate-400 absolute right-3 top-2.5 pointer-events-none" />
             </div>
+            <p className="text-[11px] text-slate-500 mt-1">
+              Changes which NIC Npcap listens on. Netstat connection list is system-wide.
+            </p>
           </div>
 
           {/* SECTION 3: Daily Bandwidth Quota Limit */}
@@ -201,9 +271,11 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
             <div>
               <p className="font-semibold text-slate-200 flex items-center gap-1.5">
                 <ShieldCheck className="w-3.5 h-3.5 text-rose-400" />
-                Kernel WFP Auto-Block
+                Kernel Firewall Auto-Block
               </p>
-              <p className="text-[11px] text-slate-500 mt-0.5">Auto-block suspicious blacklisted IPs.</p>
+              <p className="text-[11px] text-slate-500 mt-0.5">
+                Auto-add Windows Firewall block rules for suspicious IPs.
+              </p>
             </div>
             <input
               type="checkbox"

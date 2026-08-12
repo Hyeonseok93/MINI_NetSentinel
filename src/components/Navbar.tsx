@@ -1,5 +1,6 @@
 import React from 'react';
 import { Settings, Cpu, Minimize2, Play, Pause, Bell, Download, ShieldAlert } from 'lucide-react';
+import logoImg from '../../public/logo.png';
 
 interface NavbarProps {
   isMonitoring: boolean;
@@ -11,6 +12,10 @@ interface NavbarProps {
   unresolvedAnomaliesCount: number;
   trustedCount?: number;
   blacklistedCount?: number;
+  connectionMode?: 'electron' | 'vite-dev' | 'offline';
+  connectionOk?: boolean;
+  connectionError?: string | null;
+  captureMode?: 'npcap' | 'netstat' | 'unknown';
 }
 
 export const Navbar: React.FC<NavbarProps> = ({
@@ -22,13 +27,28 @@ export const Navbar: React.FC<NavbarProps> = ({
   onExportReport,
   unresolvedAnomaliesCount,
   blacklistedCount = 0,
+  connectionMode = 'offline',
+  connectionOk = false,
+  connectionError = null,
+  captureMode = 'unknown',
 }) => {
+  const bridgeLabel =
+    connectionMode === 'electron' ? 'Electron' : connectionMode === 'vite-dev' ? 'Vite Dev' : 'No Bridge';
+  const bridgeClass = connectionOk
+    ? 'text-emerald-400'
+    : connectionMode === 'offline'
+      ? 'text-rose-400'
+      : 'text-amber-400';
+  const captureLabel = captureMode === 'npcap' ? 'Npcap' : captureMode === 'netstat' ? 'Netstat' : '—';
+  const captureClass =
+    captureMode === 'npcap' ? 'text-cyan-400' : captureMode === 'netstat' ? 'text-amber-400' : 'text-slate-500';
+
   return (
     <header className="glass-panel border-b border-slate-800/80 sticky top-0 z-40">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between">
         {/* logo.png Image + Solid NetSentinel Text (NO Gradient, NO Shadow/Mask/Fade) */}
         <div className="flex items-center gap-3">
-          <img src="/logo.png" alt="NetSentinel Logo" className="h-9 w-auto object-contain" />
+          <img src={logoImg} alt="NetSentinel Logo" className="h-9 w-auto object-contain" />
           <h1 className="text-2xl font-black text-[#00b4d8] tracking-tight">
             NetSentinel
           </h1>
@@ -36,12 +56,35 @@ export const Navbar: React.FC<NavbarProps> = ({
 
       {/* Status & Control Actions */}
       <div className="flex items-center gap-3">
-        {/* Resource Efficiency Pill */}
-        <div className="hidden md:flex items-center gap-2 px-3 py-1.5 rounded-lg bg-slate-900/80 border border-slate-800 text-xs font-mono text-slate-300">
-          <Cpu className="w-3.5 h-3.5 text-emerald-400 animate-pulse" />
-          <span>CPU: <strong className="text-emerald-400">0.2%</strong></span>
+        {/* Capture backend mode */}
+        <div
+          className="hidden md:flex items-center gap-2 px-3 py-1.5 rounded-lg bg-slate-900/80 border border-slate-800 text-xs font-mono text-slate-300"
+          title={
+            captureMode === 'npcap'
+              ? 'Real packet/byte counters via Npcap'
+              : captureMode === 'netstat'
+                ? 'Connection list only (netstat). Packet/byte volumes are 0 by design — not estimated.'
+                : 'Capture mode unknown'
+          }
+        >
+          <span>
+            Capture: <strong className={captureClass}>{captureLabel}</strong>
+          </span>
+        </div>
+
+        {/* Capture bridge health */}
+        <div
+          className="hidden md:flex items-center gap-2 px-3 py-1.5 rounded-lg bg-slate-900/80 border border-slate-800 text-xs font-mono text-slate-300"
+          title={connectionError || 'Telemetry bridge status'}
+        >
+          <Cpu className={`w-3.5 h-3.5 ${bridgeClass}`} />
+          <span>
+            Bridge: <strong className={bridgeClass}>{bridgeLabel}</strong>
+          </span>
           <span className="text-slate-600">|</span>
-          <span>RAM: <strong className="text-cyan-400">32MB</strong></span>
+          <span className={connectionOk ? 'text-emerald-400' : 'text-rose-400'}>
+            {connectionOk ? 'OK' : 'DOWN'}
+          </span>
         </div>
 
         {/* Monitoring Toggle */}

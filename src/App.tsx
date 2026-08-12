@@ -18,6 +18,7 @@ export function App() {
   const [history, setHistory] = useState<TrafficHistoryPoint[]>([]);
   const [anomalies, setAnomalies] = useState<AnomalyEvent[]>([]);
   const [blacklistedIps, setBlacklistedIps] = useState<BlacklistedIpItem[]>([]);
+  const [tick, setTick] = useState(0);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isTrustedHubOpen, setIsTrustedHubOpen] = useState(false);
   const [isBlacklistOpen, setIsBlacklistOpen] = useState(false);
@@ -28,19 +29,49 @@ export function App() {
     notifyOnNewIp: true,
     autoBlockSuspicious: true,
     refreshIntervalMs: 1000,
-    activeInterface: 'Ethernet 0 (Intel(R) Ethernet Connection)',
+    activeInterface: '',
     dailyQuotaValue: 10,
     dailyQuotaUnit: 'GB',
   });
 
   useEffect(() => {
+    // Empty activeInterface = let Npcap auto-pick; do not push a fake adapter name.
+    packetEngine.applyMonitoringConfig({
+      spikeThresholdPacketsPerSec: config.spikeThresholdPacketsPerSec,
+      notifyOnNewIp: config.notifyOnNewIp,
+      autoBlockSuspicious: config.autoBlockSuspicious,
+    });
+
+    const ipc = typeof window !== 'undefined' ? window.electronIPC : null;
+    if (!ipc?.invoke) return;
+    ipc
+      .invoke('capture-status')
+      .then((status: { deviceName?: string; device?: string }) => {
+        const picked = status?.deviceName || status?.device || '';
+        if (picked) {
+          setConfig((prev) =>
+            prev.activeInterface ? prev : { ...prev, activeInterface: picked }
+          );
+        }
+      })
+      .catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    if (!isMonitoring) {
+      packetEngine.stop();
+      return;
+    }
+
     packetEngine.start(config.refreshIntervalMs);
 
     const unsubscribe = packetEngine.subscribe(() => {
       setSessions(packetEngine.getSessions());
-      setHistory(packetEngine.getHistory());
-      setAnomalies(packetEngine.getAnomalies());
+      // Copy so React/Recharts see a new reference (engine mutates the same array in place)
+      setHistory([...packetEngine.getTrafficHistory()]);
+      setAnomalies(packetEngine.getAnomalyEvents());
       setBlacklistedIps(packetEngine.getBlacklistedIps());
+      setTick((t) => t + 1);
     });
 
     return () => {
@@ -70,9 +101,14 @@ export function App() {
   };
 
   // Calculations & Enterprise Telemetry Data
-  const totalPackets = sessions.reduce((acc, curr) => acc + curr.totalPackets, 0);
-  const totalBytes = sessions.reduce((acc, curr) => acc + curr.totalBytes, 0);
-  const unresolvedAnomalies = anomalies.filter((a) => !a.resolved);
+  // tick forces re-read of derived engine getters (processes/geo/trusted) on each notify
+  void tick;
+  const currentSessions = sessions;
+  const currentAnomalies = anomalies;
+  const totalPackets = currentSessions.reduce((acc, curr) => acc + curr.totalPackets, 0);
+  const totalBytes = currentSessions.reduce((acc, curr) => acc + curr.totalBytes, 0);
+  const unresolvedAnomalies = currentAnomalies.filter((a) => !a.resolved);
+  const connectionStatus = packetEngine.getConnectionStatus();
   const trustedList = packetEngine.getTrustedList();
   const verifiedNormalList = packetEngine.getConfirmedNormalList();
   const processBreakdown = packetEngine.getProcessBreakdown();
@@ -113,13 +149,17 @@ export function App() {
         unresolvedAnomaliesCount={unresolvedAnomalies.length}
         trustedCount={trustedList.length}
         blacklistedCount={blacklistedIps.length}
+        connectionMode={connectionStatus.mode}
+        connectionOk={connectionStatus.ok}
+        connectionError={connectionStatus.lastError}
+        captureMode={connectionStatus.captureMode}
       />
 
       {/* Main Content Body */}
       <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 py-6 space-y-6">
         {/* KPI Summary Cards */}
         <StatsCards
-          totalIps={sessions.length}
+          totalIps={currentSessions.length}
           totalPackets={totalPackets}
           totalBytes={totalBytes}
           anomaliesCount={unresolvedAnomalies.length}
@@ -135,11 +175,11 @@ export function App() {
         <TrafficChart data={history} />
 
         {/* Active Security Alerts Audit Feed */}
-        <AnomalyLog anomalies={anomalies} onResolve={handleResolveAnomaly} />
+        <AnomalyLog anomalies={currentAnomalies} onResolve={handleResolveAnomaly} />
 
         {/* Unified Main Telemetry Hub Card (Shared Max Height & Scrollbar with Tab Switching) */}
         <EnterpriseHubCard
-          sessions={sessions}
+          sessions={currentSessions}
           processes={processBreakdown}
           cumulativeProcesses={cumulativeProcessBreakdown}
           geoNodes={geoNodes}
@@ -167,8 +207,16 @@ export function App() {
         onClose={() => setIsSettingsOpen(false)}
         config={config}
         onSaveConfig={(newConfig) => {
-          setConfig(newConfig);
-          setIsMonitoring(newConfig.isMonitoring);
+          // Keep Navbar pause/resume as source of truth; Settings has no monitoring toggle
+          setConfig({ ...newConfig, isMonitoring });
+          packetEngine.applyMonitoringConfig({
+            spikeThresholdPacketsPerSec: newConfig.spikeThresholdPacketsPerSec,
+            notifyOnNewIp: newConfig.notifyOnNewIp,
+            autoBlockSuspicious: newConfig.autoBlockSuspicious,
+            ...(newConfig.activeInterface
+              ? { activeInterface: newConfig.activeInterface }
+              : {}),
+          });
         }}
       />
 
