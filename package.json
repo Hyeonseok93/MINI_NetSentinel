@@ -50,6 +50,8 @@
     "electron-builder": "^26.15.3",
     "electron-packager": "^17.1.2",
     "png-to-ico": "^3.0.2",
+    "pngjs": "^7.0.0",
+    "to-ico": "^1.1.5",
     "typescript": "~5.8.3",
     "vite": "^7.0.4"
   }
