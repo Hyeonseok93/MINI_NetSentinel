@@ -2,7 +2,6 @@ import React, { useState } from 'react';
 import { GeoNode, IpSession } from '../../types/network';
 import { formatBytes } from '../../utils/formatters';
 import { getContinentName, ContinentName } from '../../utils/continentResolver';
-import { WorldMapCanvas } from './WorldMapCanvas';
 import {
   HelpCircle,
   Navigation,
@@ -71,13 +70,6 @@ export const HubGeoGrid: React.FC<HubGeoGridProps> = ({
 
   return (
     <div className="flex flex-col gap-3 w-full">
-      {/* 0. Interactive SVG World Map Canvas */}
-      <WorldMapCanvas
-        selectedContinent={selectedContinent}
-        onSelectContinent={(cont) => setSelectedContinent(cont)}
-        continentStats={continentStats}
-      />
-
       {/* 1. Continent Category Selector Pills Bar */}
       <div className="flex items-center gap-2 overflow-x-auto pb-1 custom-scrollbar text-xs">
         <button
