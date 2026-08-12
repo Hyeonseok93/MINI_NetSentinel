@@ -69,7 +69,7 @@ export const HubGeoGrid: React.FC<HubGeoGridProps> = ({
   });
 
   return (
-    <div className="p-6 space-y-4">
+    <div className="p-6 space-y-3">
       {/* 1. Continent Category Selector Pills Bar */}
       <div className="flex items-center gap-2 overflow-x-auto pb-1 custom-scrollbar text-xs">
         <button
