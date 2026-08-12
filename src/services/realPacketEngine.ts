@@ -421,21 +421,46 @@ export class RealPacketEngine {
     this.notify();
   }
 
-  public toggleBlockIp(ip: string) {
-    if (this.blockedIps.has(ip)) {
-      this.blockedIps.delete(ip);
-      const sess = this.sessions.get(ip);
-      if (sess) {
-        sess.status = 'normal';
-      }
-    } else {
-      this.blockedIps.add(ip);
-      const sess = this.sessions.get(ip);
-      if (sess) {
-        sess.status = 'blocked';
-      }
+  private blockedIpReasons: Map<string, string> = new Map();
+
+  public getBlacklistedIps(): import('../types/network').BlacklistedIpItem[] {
+    const list: import('../types/network').BlacklistedIpItem[] = [];
+    this.blockedIps.forEach((ip) => {
+      list.push({
+        ip,
+        reason: this.blockedIpReasons.get(ip) || 'Blocked by Firewall Policy',
+        blockedAt: Date.now(),
+      });
+    });
+    return list;
+  }
+
+  public blockIp(ip: string, reason: string = 'Manual Security Block') {
+    this.blockedIps.add(ip);
+    this.blockedIpReasons.set(ip, reason);
+    const sess = this.sessions.get(ip);
+    if (sess) {
+      sess.status = 'blocked';
     }
     this.notify();
+  }
+
+  public unblockIp(ip: string) {
+    this.blockedIps.delete(ip);
+    this.blockedIpReasons.delete(ip);
+    const sess = this.sessions.get(ip);
+    if (sess) {
+      sess.status = 'normal';
+    }
+    this.notify();
+  }
+
+  public toggleBlockIp(ip: string) {
+    if (this.blockedIps.has(ip)) {
+      this.unblockIp(ip);
+    } else {
+      this.blockIp(ip, 'User Blocked');
+    }
   }
 
   public getProcessBreakdown(): import('../types/network').ProcessTrafficPoint[] {
@@ -449,6 +474,33 @@ export class RealPacketEngine {
   public clearCumulativeProcesses() {
     this.cumulativeProcessMap.clear();
     this.notify();
+  }
+
+  public getGroupedCumulativeProcesses(): import('../types/network').GroupedProcess[] {
+    const map = new Map<string, import('../types/network').GroupedProcess>();
+
+    this.cumulativeProcessMap.forEach((proc) => {
+      if (!map.has(proc.processName)) {
+        map.set(proc.processName, {
+          processName: proc.processName,
+          pids: [proc],
+          packetsIn: proc.packetsIn,
+          packetsOut: proc.packetsOut,
+          totalPackets: proc.totalPackets,
+          totalBytes: proc.bytesTotal,
+          iconType: proc.iconType,
+        });
+      } else {
+        const item = map.get(proc.processName)!;
+        item.pids.push(proc);
+        item.packetsIn += proc.packetsIn;
+        item.packetsOut += proc.packetsOut;
+        item.totalPackets += proc.totalPackets;
+        item.totalBytes += proc.bytesTotal;
+      }
+    });
+
+    return Array.from(map.values()).sort((a, b) => b.totalBytes - a.totalBytes);
   }
 
   public getGeoNodes(): import('../types/network').GeoNode[] {

@@ -5,17 +5,22 @@ import { TrafficChart } from './components/TrafficChart';
 import { AnomalyLog } from './components/AnomalyLog';
 import { SettingsModal } from './components/SettingsModal';
 import { TrustedManagerModal } from './components/TrustedManagerModal';
+import { BlacklistManagerModal } from './components/BlacklistManagerModal';
+import { BandwidthGaugeCard } from './components/BandwidthGaugeCard';
 import { EnterpriseHubCard } from './components/EnterpriseHubCard';
 import { realPacketEngine as packetEngine } from './services/realPacketEngine';
-import { IpSession, AnomalyEvent, TrafficHistoryPoint, MonitoringConfig } from './types/network';
+import { exportAuditReportCsv } from './utils/reportExporter';
+import { IpSession, AnomalyEvent, TrafficHistoryPoint, MonitoringConfig, BlacklistedIpItem } from './types/network';
 
 export function App() {
   const [isMonitoring, setIsMonitoring] = useState(true);
   const [sessions, setSessions] = useState<IpSession[]>([]);
   const [history, setHistory] = useState<TrafficHistoryPoint[]>([]);
   const [anomalies, setAnomalies] = useState<AnomalyEvent[]>([]);
+  const [blacklistedIps, setBlacklistedIps] = useState<BlacklistedIpItem[]>([]);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isTrustedHubOpen, setIsTrustedHubOpen] = useState(false);
+  const [isBlacklistOpen, setIsBlacklistOpen] = useState(false);
 
   const [config, setConfig] = useState<MonitoringConfig>({
     isMonitoring: true,
@@ -35,6 +40,7 @@ export function App() {
       setSessions(packetEngine.getSessions());
       setHistory(packetEngine.getHistory());
       setAnomalies(packetEngine.getAnomalies());
+      setBlacklistedIps(packetEngine.getBlacklistedIps());
     });
 
     return () => {
@@ -87,6 +93,13 @@ export function App() {
       : 1024 * 1024 * 1024 * 1024; // TB
   const dailyQuotaBytes = quotaVal * quotaUnitMultiplier;
 
+  const handleExportReport = () => {
+    const allSessions = packetEngine.getSessions();
+    const allProcesses = packetEngine.getGroupedCumulativeProcesses();
+    const allGeoNodes = packetEngine.getCumulativeGeoNodes();
+    exportAuditReportCsv(allSessions, allProcesses, allGeoNodes);
+  };
+
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col font-sans antialiased selection:bg-cyan-500 selection:text-slate-950">
       {/* Top Navigation Bar */}
@@ -95,8 +108,11 @@ export function App() {
         onToggleMonitoring={handleToggleMonitoring}
         onOpenSettings={() => setIsSettingsOpen(true)}
         onOpenTrustedHub={() => setIsTrustedHubOpen(true)}
+        onOpenBlacklist={() => setIsBlacklistOpen(true)}
+        onExportReport={handleExportReport}
         unresolvedAnomaliesCount={unresolvedAnomalies.length}
         trustedCount={trustedList.length}
+        blacklistedCount={blacklistedIps.length}
       />
 
       {/* Main Content Body */}
@@ -107,6 +123,12 @@ export function App() {
           totalPackets={totalPackets}
           totalBytes={totalBytes}
           anomaliesCount={unresolvedAnomalies.length}
+        />
+
+        {/* Real-time Dual Bandwidth Speed Gauges & Top 5 Process Traffic Ranking */}
+        <BandwidthGaugeCard
+          processes={packetEngine.getGroupedCumulativeProcesses()}
+          history={history}
         />
 
         {/* Real-time Traffic Flow Rate Graph */}
@@ -161,6 +183,15 @@ export function App() {
         onAddVerifiedNormal={(ip, domain) => packetEngine.addVerifiedNormalIp(ip, domain)}
         onPromoteToBaseline={(ip) => packetEngine.toggleBaseline(ip)}
         onResetNormalStatus={(ip) => packetEngine.resetNormalStatus(ip)}
+      />
+
+      {/* Firewall Blacklist Manager Modal */}
+      <BlacklistManagerModal
+        isOpen={isBlacklistOpen}
+        onClose={() => setIsBlacklistOpen(false)}
+        blacklistedIps={blacklistedIps}
+        onUnblockIp={(ip) => packetEngine.unblockIp(ip)}
+        onAddBlockIp={(ip, reason) => packetEngine.blockIp(ip, reason)}
       />
     </div>
   );

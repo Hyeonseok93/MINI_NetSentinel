@@ -23,6 +23,8 @@ export interface TrafficHistoryPoint {
   packetsIn: number;
   packetsOut: number;
   bytesSec: number;
+  bytesIn?: number;
+  bytesOut?: number;
 }
 
 export interface AnomalyEvent {
@@ -76,4 +78,20 @@ export interface MonitoringConfig {
   activeInterface: string;
   dailyQuotaValue: number;
   dailyQuotaUnit: 'KB' | 'MB' | 'GB' | 'TB';
+}
+
+export interface BlacklistedIpItem {
+  ip: string;
+  reason: string;
+  blockedAt: number;
+}
+
+export interface GroupedProcess {
+  processName: string;
+  pids: ProcessTrafficPoint[];
+  packetsIn: number;
+  packetsOut: number;
+  totalPackets: number;
+  totalBytes: number;
+  iconType: 'browser' | 'chat' | 'system' | 'game' | 'code' | 'cloud' | 'default';
 }

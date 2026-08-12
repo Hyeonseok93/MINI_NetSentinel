@@ -1,13 +1,16 @@
 import React from 'react';
-import { Settings, Cpu, Minimize2, Play, Pause, Bell } from 'lucide-react';
+import { Settings, Cpu, Minimize2, Play, Pause, Bell, Download, ShieldAlert } from 'lucide-react';
 
 interface NavbarProps {
   isMonitoring: boolean;
   onToggleMonitoring: () => void;
   onOpenSettings: () => void;
   onOpenTrustedHub: () => void;
+  onOpenBlacklist?: () => void;
+  onExportReport?: () => void;
   unresolvedAnomaliesCount: number;
   trustedCount?: number;
+  blacklistedCount?: number;
 }
 
 export const Navbar: React.FC<NavbarProps> = ({
@@ -15,7 +18,10 @@ export const Navbar: React.FC<NavbarProps> = ({
   onToggleMonitoring,
   onOpenSettings,
   onOpenTrustedHub,
+  onOpenBlacklist,
+  onExportReport,
   unresolvedAnomaliesCount,
+  blacklistedCount = 0,
 }) => {
   return (
     <header className="glass-panel border-b border-slate-800/80 sticky top-0 z-40">
@@ -59,6 +65,35 @@ export const Navbar: React.FC<NavbarProps> = ({
             </>
           )}
         </button>
+
+        {/* Export Security Audit Report Button */}
+        {onExportReport && (
+          <button
+            onClick={onExportReport}
+            className="p-2.5 rounded-xl bg-slate-900/80 text-slate-300 border border-slate-800 hover:text-cyan-400 hover:border-cyan-500/40 hover:bg-slate-800 transition-all flex items-center gap-1.5 text-xs font-semibold"
+            title="Download CSV Audit Report"
+          >
+            <Download className="w-4 h-4 text-cyan-400" />
+            <span className="hidden sm:inline">Export</span>
+          </button>
+        )}
+
+        {/* Firewall Blacklist Manager Button */}
+        {onOpenBlacklist && (
+          <button
+            onClick={onOpenBlacklist}
+            className="relative p-2.5 rounded-xl bg-slate-900/80 text-slate-300 border border-slate-800 hover:text-rose-400 hover:border-rose-500/40 hover:bg-slate-800 transition-all flex items-center gap-1.5 text-xs font-semibold"
+            title="Firewall Blacklist Manager"
+          >
+            <ShieldAlert className="w-4 h-4 text-rose-400" />
+            <span className="hidden sm:inline">Blacklist</span>
+            {blacklistedCount > 0 && (
+              <span className="px-1.5 py-0.2 text-[9px] font-bold rounded-full bg-rose-950 text-rose-300 border border-rose-800">
+                {blacklistedCount}
+              </span>
+            )}
+          </button>
+        )}
 
         {/* Dedicated Whitelist & Notification Hub Button */}
         <button
