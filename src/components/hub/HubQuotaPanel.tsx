@@ -18,7 +18,7 @@ export const HubQuotaPanel: React.FC<HubQuotaPanelProps> = ({
   isQuotaExceeded,
 }) => {
   return (
-    <div className="p-6 space-y-6 w-full">
+    <div className="w-full">
       <div className="p-6 rounded-2xl bg-slate-900/60 border border-slate-800 space-y-4">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2.5">

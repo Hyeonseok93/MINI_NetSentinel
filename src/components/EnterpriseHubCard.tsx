@@ -541,8 +541,8 @@ export const EnterpriseHubCard: React.FC<EnterpriseHubCardProps> = ({
         {activeTab === 'quota' && null}
       </div>
 
-      {/* Shared Container with Shared Max Height & Custom Scrollbar */}
-      <div className="max-h-[800px] overflow-y-auto custom-scrollbar flex-1">
+      {/* Shared Unified Container with Single Standard Padding & Custom Scrollbar */}
+      <div className="p-6 max-h-[800px] overflow-y-auto custom-scrollbar flex-1 space-y-3">
         {activeTab === 'sessions' && (
           <HubSessionsTable
             sessions={filteredSessions}

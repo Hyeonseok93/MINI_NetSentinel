@@ -68,8 +68,7 @@ export const HubAppsGrid: React.FC<HubAppsGridProps> = ({
   };
 
   return (
-    <div className="p-6 space-y-4">
-      <div className="flex flex-col space-y-3 w-full">
+    <div className="flex flex-col space-y-3 w-full">
         {groupedProcesses.length === 0 ? (
           <div className="py-12 text-center text-slate-500 font-mono">
             No Windows app processes match the search criteria.
@@ -178,6 +177,5 @@ export const HubAppsGrid: React.FC<HubAppsGridProps> = ({
           })
         )}
       </div>
-    </div>
   );
 };
