@@ -559,7 +559,7 @@ export const EnterpriseHubCard: React.FC<EnterpriseHubCardProps> = ({
         )}
 
         {activeTab === 'geo' && (
-          <HubGeoGrid filteredGeoNodes={filteredGeoNodes} />
+          <HubGeoGrid filteredGeoNodes={filteredGeoNodes} sessions={sessions} />
         )}
 
         {activeTab === 'quota' && (
