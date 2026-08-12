@@ -8,13 +8,11 @@ import { TrustedManagerModal } from './components/TrustedManagerModal';
 import { BlacklistManagerModal } from './components/BlacklistManagerModal';
 import { BandwidthGaugeCard } from './components/BandwidthGaugeCard';
 import { EnterpriseHubCard } from './components/EnterpriseHubCard';
-import { SplashLoader } from './components/SplashLoader';
 import { realPacketEngine as packetEngine } from './services/realPacketEngine';
 import { exportAuditReportCsv } from './utils/reportExporter';
 import { IpSession, AnomalyEvent, TrafficHistoryPoint, MonitoringConfig, BlacklistedIpItem } from './types/network';
 
 export function App() {
-  const [showSplash, setShowSplash] = useState(true);
   const [isMonitoring, setIsMonitoring] = useState(true);
   const [sessions, setSessions] = useState<IpSession[]>([]);
   const [history, setHistory] = useState<TrafficHistoryPoint[]>([]);
@@ -104,9 +102,6 @@ export function App() {
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col font-sans antialiased selection:bg-cyan-500 selection:text-slate-950">
-      {/* High-Tech Splash Loading Canopy */}
-      {showSplash && <SplashLoader onComplete={() => setShowSplash(false)} />}
-
       {/* Top Navigation Bar */}
       <Navbar
         isMonitoring={isMonitoring}
