@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
-    "build:exe": "tsc && vite build && electron-packager . NetSentinel_Portable --platform=win32 --arch=x64 --out=dist_portable --overwrite",
+    "build:exe": "node scripts/convert-icon.cjs && tsc && vite build && electron-packager . NetSentinel_Portable --platform=win32 --arch=x64 --icon=public/icon.ico --out=dist_portable --overwrite",
     "preview": "vite preview",
     "tauri": "tauri"
   },
@@ -49,6 +49,7 @@
     "electron": "^43.4.0",
     "electron-builder": "^26.15.3",
     "electron-packager": "^17.1.2",
+    "png-to-ico": "^3.0.2",
     "typescript": "~5.8.3",
     "vite": "^7.0.4"
   }
