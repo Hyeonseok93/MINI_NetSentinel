@@ -70,7 +70,7 @@ export const Navbar: React.FC<NavbarProps> = ({
         {onExportReport && (
           <button
             onClick={onExportReport}
-            className="p-2.5 rounded-xl bg-slate-900/80 text-slate-300 border border-slate-800 hover:text-cyan-400 hover:border-cyan-500/40 hover:bg-slate-800 transition-all flex items-center gap-1.5 text-xs font-semibold"
+            className="p-2.5 rounded-xl bg-slate-900/80 text-slate-300 border border-slate-800 hover:text-cyan-400 hover:border-cyan-500/40 hover:bg-slate-800 transition-all flex items-center justify-center gap-1.5 text-xs font-semibold w-[105px] shrink-0"
             title="Download CSV Audit Report"
           >
             <Download className="w-4 h-4 text-cyan-400" />
@@ -82,7 +82,7 @@ export const Navbar: React.FC<NavbarProps> = ({
         {onOpenBlacklist && (
           <button
             onClick={onOpenBlacklist}
-            className="relative p-2.5 rounded-xl bg-slate-900/80 text-slate-300 border border-slate-800 hover:text-rose-400 hover:border-rose-500/40 hover:bg-slate-800 transition-all flex items-center gap-1.5 text-xs font-semibold"
+            className="relative p-2.5 rounded-xl bg-slate-900/80 text-slate-300 border border-slate-800 hover:text-rose-400 hover:border-rose-500/40 hover:bg-slate-800 transition-all flex items-center justify-center gap-1.5 text-xs font-semibold w-[105px] shrink-0"
             title="Firewall Blacklist Manager"
           >
             <ShieldAlert className="w-4 h-4 text-rose-400" />
@@ -98,7 +98,7 @@ export const Navbar: React.FC<NavbarProps> = ({
         {/* Dedicated Whitelist & Notification Hub Button */}
         <button
           onClick={onOpenTrustedHub}
-          className="relative p-2.5 rounded-xl bg-slate-900/80 text-slate-300 border border-slate-800 hover:text-emerald-400 hover:border-emerald-500/40 hover:bg-slate-800 transition-all flex items-center gap-1.5 text-xs font-semibold"
+          className="relative p-2.5 rounded-xl bg-slate-900/80 text-slate-300 border border-slate-800 hover:text-emerald-400 hover:border-emerald-500/40 hover:bg-slate-800 transition-all flex items-center justify-center gap-1.5 text-xs font-semibold w-[105px] shrink-0"
           title="Notification & Trusted Whitelist Hub"
         >
           <Bell className="w-4 h-4 text-emerald-400" />
