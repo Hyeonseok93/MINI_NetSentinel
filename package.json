@@ -1,5 +1,6 @@
 {
-  "name": "mini_netsentinel",
+  "name": "netsentinel",
+  "productName": "NetSentinel",
   "private": true,
   "version": "0.1.0",
   "main": "electron-main.cjs",

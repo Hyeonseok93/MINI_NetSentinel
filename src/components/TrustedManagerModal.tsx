@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { X, ShieldCheck, Trash2, Plus, Search, CheckCircle, Shield, CheckCircle2, RotateCcw, ArrowUpRight } from 'lucide-react';
 import { TrustedEntry } from '../types/network';
 import { normalizeIpv4 } from '../utils/ip';
+import { askConfirm } from '../ui/confirmBus';
 
 export interface VerifiedNormalEntry {
   ip: string;
@@ -350,16 +351,26 @@ export const TrustedManagerModal: React.FC<TrustedManagerModalProps> = ({
           </span>
           <button
             type="button"
-            onClick={() => {
+            onClick={async () => {
               if (activeSubTab === 'whitelist') {
-                const ok = window.confirm(
-                  'Reset Trusted Baseline list?\n\nUser-added trusted IPs will be removed. Built-in defaults (8.8.8.8, etc.) stay.'
-                );
+                const ok = await askConfirm({
+                  title: 'Reset Trusted Baseline list?',
+                  message: 'User-added trusted IPs will be removed.',
+                  detail: 'Built-in defaults (8.8.8.8, etc.) stay.',
+                  confirmLabel: 'Reset List',
+                  cancelLabel: 'Cancel',
+                  tone: 'warning',
+                });
                 if (ok) onResetTrustedList();
               } else {
-                const ok = window.confirm(
-                  'Reset Verified Normal list?\n\nAll verified IPs will return to NEW (unless Trusted/Blocked).'
-                );
+                const ok = await askConfirm({
+                  title: 'Reset Verified Normal list?',
+                  message: 'All verified IPs will return to NEW.',
+                  detail: 'Trusted and Blocked entries are not affected.',
+                  confirmLabel: 'Reset List',
+                  cancelLabel: 'Cancel',
+                  tone: 'warning',
+                });
                 if (ok) onResetVerifiedList();
               }
             }}

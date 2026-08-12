@@ -14,6 +14,9 @@ import { getElectronIpc } from './utils/electronIpc';
 import { IpSession, AnomalyEvent, TrafficHistoryPoint, MonitoringConfig, BlacklistedIpItem, SpikeHistoryEntry } from './types/network';
 import { Activity, ShieldAlert, History } from 'lucide-react';
 import { HistoryFeed } from './components/HistoryFeed';
+import { ConfirmHost } from './components/ConfirmHost';
+import { ToastHost } from './components/ToastHost';
+import { showAppToast } from './ui/toastBus';
 
 const CONFIG_STORAGE_KEY = 'netsentinel-monitoring-config-v2';
 
@@ -89,6 +92,14 @@ export function App() {
         }
       })
       .catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    const ipc = getElectronIpc();
+    if (!ipc?.onToast) return;
+    return ipc.onToast((payload) => {
+      showAppToast(payload?.title || 'NetSentinel', payload?.body || '', 'info');
+    });
   }, []);
 
   useEffect(() => {
@@ -199,7 +210,7 @@ export function App() {
 
       {/* Main Content Body — only this region scrolls */}
       <main className="flex-1 min-h-0 overflow-y-auto custom-scrollbar">
-      <div className="w-full max-w-[1600px] mx-auto px-4 sm:px-5 py-5 space-y-5">
+      <div className="w-full max-w-[1400px] mx-auto px-4 sm:px-5 py-5 space-y-5">
         {/* KPI Summary Cards */}
         <StatsCards
           totalIps={currentSessions.length}
@@ -365,6 +376,9 @@ export function App() {
         onAddBlockIp={(ip, reason) => packetEngine.blockIp(ip, reason)}
         onResetBlacklist={() => packetEngine.clearBlacklist()}
       />
+
+      <ConfirmHost />
+      <ToastHost />
     </div>
   );
 }

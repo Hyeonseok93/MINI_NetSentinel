@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { X, Sliders, Bell, Cpu, ShieldCheck, Globe, RefreshCw, HardDrive, ChevronDown, RotateCcw, History } from 'lucide-react';
 import { MonitoringConfig } from '../types/network';
 import { getElectronIpc } from '../utils/electronIpc';
+import { askConfirm } from '../ui/confirmBus';
 
 interface SettingsModalProps {
   isOpen: boolean;
@@ -110,24 +111,30 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 backdrop-blur-sm p-4">
-      <div className="glass-panel w-full max-w-md rounded-2xl border border-slate-800 shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-200">
-        {/* Header */}
-        <div className="p-4 border-b border-slate-800 flex items-center justify-between bg-slate-900/60">
-          <div className="flex items-center gap-2">
-            <Sliders className="w-4 h-4 text-cyan-400" />
-            <h3 className="text-sm font-semibold text-slate-100">Sentinel Detector Settings</h3>
+    <div className="fixed inset-0 z-[60] overflow-y-auto overscroll-contain bg-slate-950/80 backdrop-blur-sm">
+      <div className="flex min-h-full items-start justify-center p-3 sm:p-4 sm:items-center">
+        <div
+          className="glass-panel w-full max-w-md rounded-2xl border border-slate-800 shadow-2xl flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-200"
+          style={{ maxHeight: 'calc(100vh - 1.5rem)' }}
+        >
+          {/* Header — always visible */}
+          <div className="shrink-0 p-4 border-b border-slate-800 flex items-center justify-between bg-slate-900/95">
+            <div className="flex items-center gap-2 min-w-0">
+              <Sliders className="w-4 h-4 text-cyan-400 shrink-0" />
+              <h3 className="text-sm font-semibold text-slate-100 truncate">Sentinel Detector Settings</h3>
+            </div>
+            <button
+              type="button"
+              onClick={onClose}
+              className="p-1.5 rounded-xl text-slate-400 hover:text-slate-200 hover:bg-slate-800 transition-colors shrink-0"
+              aria-label="Close settings"
+            >
+              <X className="w-4 h-4" />
+            </button>
           </div>
-          <button
-            onClick={onClose}
-            className="p-1.5 rounded-xl text-slate-400 hover:text-slate-200 hover:bg-slate-800 transition-colors"
-          >
-            <X className="w-4 h-4" />
-          </button>
-        </div>
 
-        {/* Content Body */}
-        <div className="p-5 space-y-5 text-xs text-slate-300">
+          {/* Body scrolls inside modal */}
+          <div className="p-5 space-y-5 text-xs text-slate-300 overflow-y-auto overflow-x-hidden flex-1 min-h-0 custom-scrollbar">
           {/* SECTION 1: GeoIP Database Management Section */}
           <div className="p-3.5 rounded-xl bg-slate-900/80 border border-slate-800 space-y-2.5">
             <div className="flex items-center justify-between">
@@ -292,7 +299,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
             <div>
               <p className="font-semibold text-slate-200 flex items-center gap-1.5">
                 <Bell className="w-3.5 h-3.5 text-cyan-400" />
-                Windows Toast Notification
+                In-App Toast Notification
               </p>
               <p className="text-[11px] text-slate-500 mt-0.5">Alert on new unrecognized IP connections.</p>
             </div>
@@ -322,22 +329,26 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
               className="w-4 h-4 accent-rose-400 rounded cursor-pointer"
             />
           </div>
-        </div>
+          </div>
 
-        {/* Footer */}
-        <div className="p-4 border-t border-slate-800 bg-slate-900/90 flex justify-between items-center gap-3">
+          {/* Footer — always visible */}
+          <div className="shrink-0 p-4 border-t border-slate-800 bg-slate-900/95 flex justify-between items-center gap-3">
           <button
             type="button"
             disabled={isResetting}
             onClick={async () => {
-              const ok = window.confirm(
-                'Reset everything to defaults?\n\n' +
+              const ok = await askConfirm({
+                title: 'Reset everything to defaults?',
+                message:
                   '• Settings → factory defaults (toast/auto-block OFF)\n' +
                   '• Verified / Trusted / Blocked → cleared (built-in trusted kept)\n' +
                   '• Anomalies & traffic totals → cleared\n' +
-                  '• IPs will be re-learned as NEW\n\n' +
-                  'Firewall block rules will be removed for app-blocked IPs.'
-              );
+                  '• IPs will be re-learned as NEW',
+                detail: 'Firewall block rules will be removed for app-blocked IPs.',
+                confirmLabel: 'Reset All',
+                cancelLabel: 'Cancel',
+                tone: 'danger',
+              });
               if (!ok) return;
               setIsResetting(true);
               try {
@@ -365,6 +376,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
               Cancel
             </button>
           </div>
+        </div>
         </div>
       </div>
     </div>

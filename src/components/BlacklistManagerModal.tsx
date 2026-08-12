@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { X, ShieldAlert, Trash2, Plus, Lock, AlertTriangle, RotateCcw } from 'lucide-react';
 import { BlacklistedIpItem } from '../types/network';
 import { normalizeIpv4 } from '../utils/ip';
+import { askConfirm } from '../ui/confirmBus';
 
 interface BlacklistManagerModalProps {
   isOpen: boolean;
@@ -158,9 +159,14 @@ export const BlacklistManagerModal: React.FC<BlacklistManagerModalProps> = ({
             type="button"
             disabled={isResetting || blacklistedIps.length === 0}
             onClick={async () => {
-              const ok = window.confirm(
-                'Reset blacklist?\n\nAll blocked IPs will be unblocked (Windows Firewall rules removed).'
-              );
+              const ok = await askConfirm({
+                title: 'Reset blacklist?',
+                message: 'All blocked IPs will be unblocked.',
+                detail: 'Windows Firewall rules for these IPs will be removed.',
+                confirmLabel: 'Reset List',
+                cancelLabel: 'Cancel',
+                tone: 'danger',
+              });
               if (!ok) return;
               setIsResetting(true);
               try {

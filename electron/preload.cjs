@@ -24,4 +24,10 @@ contextBridge.exposeInMainWorld('electronIPC', {
     }
     return ipcRenderer.invoke(channel, ...args);
   },
+  onToast: (handler) => {
+    if (typeof handler !== 'function') return () => {};
+    const listener = (_evt, payload) => handler(payload);
+    ipcRenderer.on('app-toast', listener);
+    return () => ipcRenderer.removeListener('app-toast', listener);
+  },
 });

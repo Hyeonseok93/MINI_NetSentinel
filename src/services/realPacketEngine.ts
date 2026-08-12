@@ -2,6 +2,7 @@ import { IpSession, AnomalyEvent, TrafficHistoryPoint, ProcessTrafficPoint, GeoN
 import { getElectronIpc } from '../utils/electronIpc';
 import { normalizeIpv4 } from '../utils/ip';
 import { groupProcessesByName, sortGroupedProcessesByBytesDesc } from '../utils/groupProcesses';
+import { showAppToast } from '../ui/toastBus';
 import {
   MAX_ANOMALY_EVENTS,
   MAX_TRAFFIC_HISTORY_UI,
@@ -103,22 +104,16 @@ export class RealPacketEngine {
       this.droppedToastCount += 1;
       return;
     }
-    // Hard rate-limit: at most one Windows toast / 20s
+    // Hard rate-limit: at most one in-app toast / 20s
     if (now - this.lastToastAt < 20_000) {
       this.droppedToastCount += 1;
       return;
     }
     this.lastToastAt = now;
-    const ipc = this.getElectronIpc();
-    if (!ipc) return;
-    try {
-      const extra =
-        this.droppedToastCount > 0 ? ` (+${this.droppedToastCount} more suppressed)` : '';
-      this.droppedToastCount = 0;
-      await ipc.invoke('show-toast', { title, body: `${body}${extra}` });
-    } catch (err) {
-      console.warn('[packet-engine] toast failed:', err);
-    }
+    const extra =
+      this.droppedToastCount > 0 ? ` (+${this.droppedToastCount} more suppressed)` : '';
+    this.droppedToastCount = 0;
+    showAppToast(title, `${body}${extra}`, 'info');
   }
 
   private async detectMyPublicGeo() {

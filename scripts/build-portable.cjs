@@ -35,8 +35,11 @@ async function buildExe() {
     process.exit(1);
   }
 
-  // Fresh staging so packager never collides with a running previous build
-  rmrf(stagingDir);
+  // Drop leftover alt output folders from failed/locked builds
+  for (const junk of ['NetSentinel_new', 'NetSentinel_fix', '_staging']) {
+    rmrf(path.join(ROOT, 'release', junk));
+  }
+
   fs.mkdirSync(stagingDir, { recursive: true });
 
   try {
@@ -83,8 +86,14 @@ async function buildExe() {
       throw new Error(`Expected ${APP_NAME}.exe missing in ${packed}`);
     }
 
-    // Promote staging → clean final folder named after the product
-    moveDir(packed, finalDir);
+    try {
+      moveDir(packed, finalDir);
+    } catch (err) {
+      console.error(
+        `Could not replace release/${APP_NAME}/ (is NetSentinel.exe still running?). Close it and rebuild.`
+      );
+      throw err;
+    }
     rmrf(stagingDir);
 
     // Drop Vite intermediate (already baked into the packaged asar)

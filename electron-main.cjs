@@ -1,14 +1,20 @@
-const { app, BrowserWindow, dialog, ipcMain, Tray, Menu, nativeImage } = require('electron');
+const { app, BrowserWindow, ipcMain, Tray, Menu, nativeImage } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const { execFileSync, spawn } = require('child_process');
 const telemetry = require('./scripts/telemetry-core.cjs');
 const firewall = require('./scripts/firewall-windows.cjs');
 
+// Display name (repo folder may use MINI_ prefix; product is NetSentinel)
+try {
+  app.setName('NetSentinel');
+} catch (_) {}
+
 let splashWindow = null;
 let mainWindow = null;
 let tray = null;
 let isQuitting = false;
+let dialogWindow = null;
 
 // One instance only — leftover processes were still toasting after "close"
 const gotSingleInstanceLock = app.requestSingleInstanceLock();
@@ -126,37 +132,122 @@ function relaunchAsAdmin() {
 }
 
 /**
- * @returns {'elevated' | 'continue-limited' | 'relaunching'}
+ * Dark NetSentinel-styled modal (replaces dialog.showMessageBox / showErrorBox).
+ * @returns {Promise<number>} clicked button index
  */
-function ensureAdminOrPrompt() {
+function showAppDialog(options = {}) {
+  const {
+    title = 'NetSentinel',
+    message = '',
+    detail = '',
+    buttons = ['OK'],
+    tone = 'default',
+    width = 460,
+    height = 320,
+  } = options;
+
+  return new Promise((resolve) => {
+    if (dialogWindow && !dialogWindow.isDestroyed()) {
+      try { dialogWindow.close(); } catch (_) {}
+      dialogWindow = null;
+    }
+
+    const htmlPath = path.join(__dirname, 'electron', 'app-dialog.html');
+    const qs = new URLSearchParams({
+      title: String(title),
+      message: String(message),
+      detail: String(detail || ''),
+      tone: String(tone),
+      buttons: JSON.stringify(buttons),
+    });
+
+    let settled = false;
+    const finish = (index) => {
+      if (settled) return;
+      settled = true;
+      const idx = Number.isFinite(Number(index))
+        ? Number(index)
+        : buttons.length > 1
+          ? buttons.length - 1
+          : 0;
+      try {
+        ipcMain.removeListener('app-dialog-result', onResult);
+      } catch (_) {}
+      if (dialogWindow && !dialogWindow.isDestroyed()) {
+        try { dialogWindow.close(); } catch (_) {}
+      }
+      dialogWindow = null;
+      resolve(idx);
+    };
+
+    const onResult = (_evt, index) => finish(index);
+
+    dialogWindow = new BrowserWindow({
+      width,
+      height,
+      resizable: false,
+      minimizable: false,
+      maximizable: false,
+      fullscreenable: false,
+      frame: false,
+      show: false,
+      alwaysOnTop: true,
+      skipTaskbar: true,
+      parent: mainWindow && !mainWindow.isDestroyed() ? mainWindow : undefined,
+      modal: Boolean(mainWindow && !mainWindow.isDestroyed()),
+      backgroundColor: '#020617',
+      webPreferences: {
+        nodeIntegration: true,
+        contextIsolation: false,
+        sandbox: false,
+      },
+    });
+
+    const win = dialogWindow;
+    ipcMain.once('app-dialog-result', onResult);
+    win.on('closed', () => {
+      if (!settled) finish(buttons.length > 1 ? buttons.length - 1 : 0);
+    });
+    win.once('ready-to-show', () => {
+      if (!win.isDestroyed()) win.show();
+    });
+    win.loadFile(htmlPath, { search: qs.toString() });
+  });
+}
+
+/**
+ * @returns {Promise<'elevated' | 'continue-limited' | 'relaunching'>}
+ */
+async function ensureAdminOrPrompt() {
   if (process.platform !== 'win32') return 'elevated';
   if (isRunningAsAdmin()) return 'elevated';
 
-  const choice = dialog.showMessageBoxSync({
-    type: 'warning',
-    buttons: ['관리자 권한으로 다시 시작', '제한 모드로 계속'],
-    defaultId: 0,
-    cancelId: 1,
-    noLink: true,
-    title: '관리자 권한 필요',
-    message: 'NetSentinel은 관리자 권한으로 실행해야 합니다.',
+  const choice = await showAppDialog({
+    title: 'Administrator required',
+    message: 'NetSentinel needs administrator privileges for full capture and firewall control.',
     detail:
-      '아래 기능을 정상적으로 쓰려면 관리자 권한이 필요합니다.\n\n' +
-      '• Npcap 실시간 패킷/바이트 캡쳐\n' +
-      '• 블랙리스트 → Windows 방화벽 차단/해제\n\n' +
-      '「관리자 권한으로 다시 시작」을 누르면 UAC 확인 창이 뜹니다.\n\n' +
-      '제한 모드로 계속하면 Netstat 연결 목록만 사용됩니다.\n' +
-      '이 경우 방화벽 규칙은 적용되지 않을 수 있습니다.',
+      'Required for:\n' +
+      '• Npcap live packet / byte capture\n' +
+      '• Blacklist → Windows Firewall block/unblock\n\n' +
+      'Restart as admin to enable these features.\n' +
+      'Limited mode keeps Netstat inventory only (firewall rules may not apply).',
+    buttons: ['Restart as Admin', 'Continue Limited'],
+    tone: 'warning',
+    width: 480,
+    height: 400,
   });
 
   if (choice === 0) {
     try {
       relaunchAsAdmin();
     } catch (err) {
-      dialog.showErrorBox(
-        '관리자 권한 재실행 실패',
-        (err && err.message) || String(err)
-      );
+      await showAppDialog({
+        title: 'Elevation failed',
+        message: (err && err.message) || String(err),
+        buttons: ['OK'],
+        tone: 'danger',
+        height: 220,
+      });
       return 'continue-limited';
     }
     return 'relaunching';
@@ -231,30 +322,14 @@ ipcMain.handle('set-capture-adapter', async (_evt, deviceName) => {
 });
 
 ipcMain.handle('show-toast', async (_evt, payload) => {
-  try {
-    if (isQuitting || !app.isReady()) {
-      return { ok: false, error: 'App is quitting' };
-    }
-    // Allow toasts while hidden in tray; block only when truly gone / quitting
-    if (!mainWindow || mainWindow.isDestroyed()) {
-      return { ok: false, error: 'Main window not active' };
-    }
-    const { Notification } = require('electron');
-    if (!Notification.isSupported()) {
-      return { ok: false, error: 'Notifications not supported' };
-    }
-    const title = String(payload?.title || 'NetSentinel').slice(0, 120);
-    const body = String(payload?.body || '').slice(0, 400);
-    const note = new Notification({
-      title,
-      body,
-      silent: false,
+  // OS Notification removed — forward to renderer in-app toast host.
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.webContents.send('app-toast', {
+      title: String(payload?.title || 'NetSentinel').slice(0, 120),
+      body: String(payload?.body || '').slice(0, 400),
     });
-    note.show();
-    return { ok: true };
-  } catch (err) {
-    return { ok: false, error: err?.message || String(err) };
   }
+  return { ok: true, mode: 'in-app' };
 });
 
 function getSenderWindow(evt) {
@@ -305,6 +380,7 @@ function createSplashWindow(iconPath) {
     webPreferences: {
       nodeIntegration: false,
       contextIsolation: true,
+      sandbox: true,
     },
   });
 
@@ -318,11 +394,11 @@ function createMainWindow(iconPath) {
   const preloadPath = path.join(__dirname, 'electron', 'preload.cjs');
 
   mainWindow = new BrowserWindow({
-    width: 1480,
+    width: 1360,
     height: 900,
-    minWidth: 1400,
+    minWidth: 1200,
     minHeight: 760,
-    title: 'NetSentinel Enterprise',
+    title: 'NetSentinel',
     icon: iconPath,
     show: false,
     frame: false,
@@ -332,7 +408,7 @@ function createMainWindow(iconPath) {
       preload: preloadPath,
       nodeIntegration: false,
       contextIsolation: true,
-      sandbox: false,
+      sandbox: true,
     },
   });
 
@@ -350,11 +426,14 @@ function createMainWindow(iconPath) {
   } else if (fs.existsSync(distPath2)) {
     mainWindow.loadFile(distPath2);
   } else {
-    dialog.showErrorBox(
-      'Build Missing',
-      'dist/index.html was not found. Rebuild with npm run build:exe before launching the portable app.'
-    );
-    app.quit();
+    void showAppDialog({
+      title: 'Build Missing',
+      message: 'dist/index.html was not found.',
+      detail: 'Rebuild with npm run build:exe before launching the portable app.',
+      buttons: ['OK'],
+      tone: 'danger',
+      height: 240,
+    }).then(() => app.quit());
     return;
   }
 
@@ -379,7 +458,7 @@ function createMainWindow(iconPath) {
 app.whenReady().then(async () => {
   if (!gotSingleInstanceLock) return;
 
-  const adminState = ensureAdminOrPrompt();
+  const adminState = await ensureAdminOrPrompt();
   if (adminState === 'relaunching') {
     hardShutdown('relaunching-elevated');
     return;

@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { SpikeHistoryEntry } from '../types/network';
 import { formatBytes } from '../utils/formatters';
 import { History, Zap, ChevronDown, ChevronRight, Trash2, Cpu, Globe } from 'lucide-react';
+import { askConfirm } from '../ui/confirmBus';
 
 interface HistoryFeedProps {
   entries: SpikeHistoryEntry[];
@@ -29,8 +30,15 @@ export const HistoryFeed: React.FC<HistoryFeedProps> = ({ entries, onClear, onDe
           {onClear && entries.length > 0 && (
             <button
               type="button"
-              onClick={() => {
-                if (window.confirm('Clear all spike history snapshots?')) onClear();
+              onClick={async () => {
+                const ok = await askConfirm({
+                  title: 'Clear spike history?',
+                  message: 'All spike history snapshots will be removed from memory.',
+                  confirmLabel: 'Clear All',
+                  cancelLabel: 'Cancel',
+                  tone: 'warning',
+                });
+                if (ok) onClear();
               }}
               className="px-2.5 py-1 rounded-lg text-[11px] font-semibold text-slate-400 hover:text-rose-300 bg-slate-800/80 border border-slate-700 hover:border-rose-800 transition-colors flex items-center gap-1 whitespace-nowrap"
             >
