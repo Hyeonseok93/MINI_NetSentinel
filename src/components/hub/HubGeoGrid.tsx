@@ -69,7 +69,7 @@ export const HubGeoGrid: React.FC<HubGeoGridProps> = ({
   });
 
   return (
-    <div className="space-y-3 w-full">
+    <div className="flex flex-col gap-3 w-full">
       {/* 1. Continent Category Selector Pills Bar */}
       <div className="flex items-center gap-2 overflow-x-auto pb-1 custom-scrollbar text-xs">
         <button
@@ -178,8 +178,8 @@ export const HubGeoGrid: React.FC<HubGeoGridProps> = ({
         </button>
       </div>
 
-      {/* 2. Interactive Geo Grid Container (1-Column Full Width List) */}
-      <div className="flex flex-col space-y-3 w-full">
+      {/* 2. Interactive Geo Grid Container (1-Column Full Width List with Flexbox gap-3) */}
+      <div className="flex flex-col gap-3 w-full">
         {displayGeoNodes.length === 0 ? (
           <div className="py-12 text-center text-slate-500 font-mono">
             No country nodes match the selected continent filter ({selectedContinent}).
