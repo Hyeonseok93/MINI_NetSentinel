@@ -15,9 +15,16 @@ import {
 interface HubGeoGridProps {
   filteredGeoNodes: GeoNode[];
   sessions?: IpSession[];
+  geoSubTab?: 'live' | 'cumulative';
+  getCumulativeGeoSessions?: (country: string) => IpSession[];
 }
 
-export const HubGeoGrid: React.FC<HubGeoGridProps> = ({ filteredGeoNodes, sessions = [] }) => {
+export const HubGeoGrid: React.FC<HubGeoGridProps> = ({
+  filteredGeoNodes,
+  sessions = [],
+  geoSubTab = 'live',
+  getCumulativeGeoSessions,
+}) => {
   const [selectedContinent, setSelectedContinent] = useState<ContinentName | 'All'>('All');
   const [expandedCountries, setExpandedCountries] = useState<Set<string>>(new Set());
 
@@ -171,10 +178,10 @@ export const HubGeoGrid: React.FC<HubGeoGridProps> = ({ filteredGeoNodes, sessio
         </button>
       </div>
 
-      {/* 2. Interactive Geo Grid Container with Autonomous Height */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 items-start">
+      {/* 2. Interactive Geo Grid Container (1-Column Full Width List) */}
+      <div className="flex flex-col space-y-3 w-full">
         {displayGeoNodes.length === 0 ? (
-          <div className="col-span-4 py-12 text-center text-slate-500 font-mono">
+          <div className="py-12 text-center text-slate-500 font-mono">
             No country nodes match the selected continent filter ({selectedContinent}).
           </div>
         ) : (
@@ -183,10 +190,13 @@ export const HubGeoGrid: React.FC<HubGeoGridProps> = ({ filteredGeoNodes, sessio
             const isExpanded = expandedCountries.has(node.country);
             const continentName = getContinentName(node.countryCode, node.country);
 
-            // Filter IP Sessions connecting to this country
-            const matchedSessions = sessions.filter(
-              (s) => s.country === node.country || (isUnknown && (s.country === 'Unknown Location' || !s.country))
-            );
+            // Filter IP Sessions connecting to this country (Live vs Permanent Cumulative History)
+            const matchedSessions =
+              geoSubTab === 'cumulative' && getCumulativeGeoSessions
+                ? getCumulativeGeoSessions(node.country)
+                : sessions.filter(
+                    (s) => s.country === node.country || (isUnknown && (s.country === 'Unknown Location' || !s.country))
+                  );
 
             return (
               <div

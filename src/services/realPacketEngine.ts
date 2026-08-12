@@ -39,6 +39,7 @@ export class RealPacketEngine {
   private cumulativeProcessMap: Map<string, ProcessTrafficPoint> = new Map();
   private prevProcessStatsMap: Map<string, { bytesTotal: number; packetsIn: number; packetsOut: number }> = new Map();
   private cumulativeGeoMap: Map<string, GeoNode> = new Map();
+  private cumulativeCountrySessionsMap: Map<string, Map<string, IpSession>> = new Map();
   private myPublicGeo: { country: string; countryCode: string } = { country: 'South Korea', countryCode: 'KR' };
 
   constructor() {
@@ -149,6 +150,25 @@ export class RealPacketEngine {
         };
 
         this.sessions.set(native.ip, currentSession);
+
+        // Persist into cumulativeCountrySessionsMap for permanent Geo history retention
+        const countryKey = currentSession.country || 'Unknown Location';
+        if (!this.cumulativeCountrySessionsMap.has(countryKey)) {
+          this.cumulativeCountrySessionsMap.set(countryKey, new Map());
+        }
+        const countrySessionMap = this.cumulativeCountrySessionsMap.get(countryKey)!;
+        if (!countrySessionMap.has(native.ip)) {
+          countrySessionMap.set(native.ip, { ...currentSession });
+        } else {
+          const existingSess = countrySessionMap.get(native.ip)!;
+          existingSess.packetsIn += native.packets_in;
+          existingSess.packetsOut += native.packets_out;
+          existingSess.totalPackets += native.total_packets;
+          existingSess.bytesIn += native.bytes_in;
+          existingSess.bytesOut += native.bytes_out;
+          existingSess.totalBytes += native.total_bytes;
+          existingSess.lastSeen = currentSession.lastSeen;
+        }
 
         secPacketsIn += native.packets_in;
         secPacketsOut += native.packets_out;
@@ -475,8 +495,15 @@ export class RealPacketEngine {
     return Array.from(this.cumulativeGeoMap.values()).sort((a, b) => b.totalBytes - a.totalBytes);
   }
 
+  public getCumulativeGeoSessions(country: string): import('../types/network').IpSession[] {
+    const map = this.cumulativeCountrySessionsMap.get(country);
+    if (!map) return [];
+    return Array.from(map.values()).sort((a, b) => b.totalBytes - a.totalBytes);
+  }
+
   public clearCumulativeGeoNodes() {
     this.cumulativeGeoMap.clear();
+    this.cumulativeCountrySessionsMap.clear();
     this.notify();
   }
 

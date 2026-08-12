@@ -130,6 +130,7 @@ export function App() {
           onToggleBlock={handleToggleBlockIp}
           onClearCumulativeProcesses={() => packetEngine.clearCumulativeProcesses()}
           onClearCumulativeGeoNodes={() => packetEngine.clearCumulativeGeoNodes()}
+          getCumulativeGeoSessions={(country) => packetEngine.getCumulativeGeoSessions(country)}
         />
       </main>
 

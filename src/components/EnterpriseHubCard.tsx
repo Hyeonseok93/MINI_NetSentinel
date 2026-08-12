@@ -30,6 +30,7 @@ interface EnterpriseHubCardProps {
   onToggleBlock: (ip: string) => void;
   onClearCumulativeProcesses?: () => void;
   onClearCumulativeGeoNodes?: () => void;
+  getCumulativeGeoSessions?: (country: string) => IpSession[];
 }
 
 export type MainTabKey = 'sessions' | 'apps' | 'geo' | 'quota';
@@ -72,6 +73,7 @@ export const EnterpriseHubCard: React.FC<EnterpriseHubCardProps> = ({
   onToggleBlock,
   onClearCumulativeProcesses,
   onClearCumulativeGeoNodes,
+  getCumulativeGeoSessions,
 }) => {
   const [activeTab, setActiveTab] = useState<MainTabKey>('sessions');
 
@@ -559,7 +561,12 @@ export const EnterpriseHubCard: React.FC<EnterpriseHubCardProps> = ({
         )}
 
         {activeTab === 'geo' && (
-          <HubGeoGrid filteredGeoNodes={filteredGeoNodes} sessions={sessions} />
+          <HubGeoGrid
+            filteredGeoNodes={filteredGeoNodes}
+            sessions={sessions}
+            geoSubTab={geoSubTab}
+            getCumulativeGeoSessions={getCumulativeGeoSessions}
+          />
         )}
 
         {activeTab === 'quota' && (
