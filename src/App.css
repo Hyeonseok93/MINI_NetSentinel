@@ -99,23 +99,10 @@
   background: transparent;
 }
 
-.custom-scrollbar::-webkit-scrollbar {
-  width: 10px;
-  height: 10px;
-}
-.custom-scrollbar::-webkit-scrollbar-track {
-  background: transparent;
-}
-.custom-scrollbar::-webkit-scrollbar-thumb {
-  background: rgba(71, 85, 105, 0.55);
-  border-radius: 999px;
-  border: 2px solid transparent;
-  background-clip: padding-box;
-}
-.custom-scrollbar::-webkit-scrollbar-thumb:hover {
-  background: rgba(100, 116, 139, 0.9);
-  border: 2px solid transparent;
-  background-clip: padding-box;
+/* Alias kept for call sites; global rules above already style these. */
+.custom-scrollbar {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(71, 85, 105, 0.7) transparent;
 }
 
 /* Hide number input spinners (Chrome/Edge/Safari/Firefox) */
@@ -134,12 +121,6 @@ input.no-spinner[type='number'] {
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
   border: 1px solid rgba(255, 255, 255, 0.08);
-}
-
-.glass-card {
-  background: rgba(30, 41, 59, 0.5);
-  backdrop-filter: blur(8px);
-  border: 1px solid rgba(255, 255, 255, 0.06);
 }
 
 .glow-cyan {

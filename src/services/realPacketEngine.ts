@@ -657,17 +657,7 @@ export class RealPacketEngine {
   public removeTrustedIp(ip: string) {
     this.trustedIps.delete(ip);
     this.trustedDomains.delete(ip);
-    const sess = this.sessions.get(ip);
-    if (sess) {
-      sess.isBaseline = false;
-      if (this.blockedIps.has(ip)) {
-        sess.status = 'blocked';
-      } else if (this.confirmedNormalIps.has(ip)) {
-        sess.status = 'normal';
-      } else {
-        sess.status = 'new';
-      }
-    }
+    this.applySessionMembership(ip);
     this.notify();
   }
 
@@ -678,11 +668,8 @@ export class RealPacketEngine {
     if (domain) this.trustedDomains.set(safeIp, domain);
     // Keep verified membership so Untrust can return to Verified (not NEW)
     const sess = this.sessions.get(safeIp);
-    if (sess) {
-      sess.isBaseline = true;
-      sess.status = this.blockedIps.has(safeIp) ? 'blocked' : 'normal';
-      if (domain) sess.domain = domain;
-    }
+    if (sess && domain) sess.domain = domain;
+    this.applySessionMembership(safeIp);
     this.notify();
   }
 
@@ -694,11 +681,8 @@ export class RealPacketEngine {
     this.trustedIps.delete(safeIp);
     this.trustedDomains.delete(safeIp);
     const sess = this.sessions.get(safeIp);
-    if (sess) {
-      sess.isBaseline = false;
-      sess.status = this.blockedIps.has(safeIp) ? 'blocked' : 'normal';
-      if (domain) sess.domain = domain;
-    }
+    if (sess && domain) sess.domain = domain;
+    this.applySessionMembership(safeIp);
     this.notify();
   }
 
@@ -707,11 +691,7 @@ export class RealPacketEngine {
     if (!safeIp) return;
     this.confirmedNormalIps.delete(safeIp);
     this.verifiedDomains.delete(safeIp);
-    const sess = this.sessions.get(safeIp);
-    if (sess && !this.trustedIps.has(safeIp) && !this.blockedIps.has(safeIp)) {
-      sess.status = 'new';
-      sess.isBaseline = false;
-    }
+    this.applySessionMembership(safeIp);
     this.notify();
   }
 
@@ -813,19 +793,7 @@ export class RealPacketEngine {
       this.blockedIps.delete(safeIp);
       this.blockedIpReasons.delete(safeIp);
       this.blockedIpAt.delete(safeIp);
-      const sess = this.sessions.get(safeIp);
-      if (sess) {
-        if (this.trustedIps.has(safeIp)) {
-          sess.isBaseline = true;
-          sess.status = 'normal';
-        } else if (this.confirmedNormalIps.has(safeIp)) {
-          sess.isBaseline = false;
-          sess.status = 'normal';
-        } else {
-          sess.isBaseline = false;
-          sess.status = 'new';
-        }
-      }
+      this.applySessionMembership(safeIp);
     };
 
     applyLocalBlock();
@@ -866,19 +834,7 @@ export class RealPacketEngine {
     this.blockedIps.delete(safeIp);
     this.blockedIpReasons.delete(safeIp);
     this.blockedIpAt.delete(safeIp);
-    const sess = this.sessions.get(safeIp);
-    if (sess) {
-      if (this.trustedIps.has(safeIp)) {
-        sess.isBaseline = true;
-        sess.status = 'normal';
-      } else if (this.confirmedNormalIps.has(safeIp)) {
-        sess.isBaseline = false;
-        sess.status = 'normal';
-      } else {
-        sess.isBaseline = false;
-        sess.status = 'new';
-      }
-    }
+    this.applySessionMembership(safeIp);
     this.notify();
 
     const ipc = this.getElectronIpc();
@@ -921,11 +877,11 @@ export class RealPacketEngine {
   }
 
   public getGeoNodes(): GeoNode[] {
-    const geoMap = new Map<string, { count: number; bytes: number; code: string; lat: number; lng: number }>();
+    const geoMap = new Map<string, { count: number; bytes: number; code: string }>();
     this.sessions.forEach((sess) => {
       const c = sess.country || 'Unknown Location';
       const code = sess.countryCode || (c === 'South Korea' ? 'KR' : c === 'United States' ? 'US' : 'NET');
-      const existing = geoMap.get(c) || { count: 0, bytes: 0, code, lat: 0, lng: 0 };
+      const existing = geoMap.get(c) || { count: 0, bytes: 0, code };
       existing.count += 1;
       existing.bytes += sess.totalBytes;
       if (code && code !== 'NET') existing.code = code;
@@ -939,8 +895,6 @@ export class RealPacketEngine {
         countryCode: val.code || 'NET',
         activeIpCount: val.count,
         totalBytes: val.bytes,
-        lat: val.lat,
-        lng: val.lng,
       };
       result.push(nodeItem);
 
@@ -985,6 +939,29 @@ export class RealPacketEngine {
     this.listeners.forEach((fn) => fn());
   }
 
+  /** Sync session row flags from trusted / verified / blocked membership sets. */
+  private applySessionMembership(ip: string) {
+    const sess = this.sessions.get(ip);
+    if (!sess) return;
+    if (this.blockedIps.has(ip)) {
+      sess.isBaseline = this.trustedIps.has(ip);
+      sess.status = 'blocked';
+      return;
+    }
+    if (this.trustedIps.has(ip)) {
+      sess.isBaseline = true;
+      sess.status = 'normal';
+      return;
+    }
+    if (this.confirmedNormalIps.has(ip)) {
+      sess.isBaseline = false;
+      sess.status = 'normal';
+      return;
+    }
+    sess.isBaseline = false;
+    sess.status = 'new';
+  }
+
   public verifyAsNormal(ip: string) {
     this.addVerifiedNormalIp(ip);
   }
@@ -995,26 +972,12 @@ export class RealPacketEngine {
     if (this.trustedIps.has(safeIp)) {
       this.trustedIps.delete(safeIp);
       this.trustedDomains.delete(safeIp);
-      const sess = this.sessions.get(safeIp);
-      if (sess) {
-        sess.isBaseline = false;
-        if (this.blockedIps.has(safeIp)) {
-          sess.status = 'blocked';
-        } else if (this.confirmedNormalIps.has(safeIp)) {
-          sess.status = 'normal';
-        } else {
-          sess.status = 'new';
-        }
-      }
     } else {
       this.trustedIps.add(safeIp);
       const sess = this.sessions.get(safeIp);
-      if (sess) {
-        sess.isBaseline = true;
-        sess.status = this.blockedIps.has(safeIp) ? 'blocked' : 'normal';
-        if (sess.domain) this.trustedDomains.set(safeIp, sess.domain);
-      }
+      if (sess?.domain) this.trustedDomains.set(safeIp, sess.domain);
     }
+    this.applySessionMembership(safeIp);
     this.notify();
   }
 

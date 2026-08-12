@@ -113,12 +113,17 @@ async function main() {
     assert(settings.includes('list-capture-adapters'), 'Settings missing list-capture-adapters');
     assert(settings.includes('activeInterface'), 'Settings missing activeInterface save path');
     assert(engine.includes('set-capture-adapter'), 'Engine missing set-capture-adapter');
-    assert(engine.includes('show-toast'), 'Engine missing show-toast');
+    assert(
+      engine.includes('showAppToast') || engine.includes('show-toast'),
+      'Engine missing in-app toast path'
+    );
     assert(engine.includes('firewall-block-ip'), 'Engine missing firewall-block-ip');
     assert(engine.includes('spikeThresholdPacketsPerSec'), 'Engine missing spike threshold use');
     assert(engine.includes('autoBlockSuspicious'), 'Engine missing autoBlockSuspicious use');
     assert(engine.includes('notifyOnNewIp'), 'Engine missing notifyOnNewIp use');
     assert(!app.includes('Ethernet 0 (Intel(R) Ethernet Connection)'), 'App still has fake hardcoded adapter default');
+    assert(app.includes('ConfirmHost') && app.includes('ToastHost'), 'App missing ConfirmHost/ToastHost');
+    assert(!settings.includes('window.confirm'), 'Settings still uses window.confirm');
     console.log('✅ Settings → engine wiring markers present\n');
   } catch (err) {
     failures.push(err.message);

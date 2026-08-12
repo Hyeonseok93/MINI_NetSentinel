@@ -1,7 +1,7 @@
 /**
  * Shared IPv4 validation for UI + engine (matches firewall-windows assertIpv4).
  */
-export function isValidIpv4(ip: string): boolean {
+function isValidIpv4(ip: string): boolean {
   if (typeof ip !== 'string') return false;
   const trimmed = ip.trim();
   if (!/^\d{1,3}(\.\d{1,3}){3}$/.test(trimmed)) return false;

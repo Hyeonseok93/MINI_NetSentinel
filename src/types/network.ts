@@ -15,7 +15,6 @@ export interface IpSession {
   protocol: 'TCP' | 'UDP' | 'ICMP' | 'HTTPS' | 'DNS';
   port: number;
   isBaseline: boolean;
-  notes?: string;
 }
 
 export interface TrafficHistoryPoint {
@@ -59,8 +58,6 @@ export interface GeoNode {
   countryCode: string;
   activeIpCount: number;
   totalBytes: number;
-  lat: number;
-  lng: number;
 }
 
 export interface MonitoringConfig {
