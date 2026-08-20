@@ -3,6 +3,7 @@
 export type ElectronIpcBridge = {
   invoke: (channel: string, ...args: unknown[]) => Promise<any>;
   onToast?: (handler: (payload: { title?: string; body?: string }) => void) => () => void;
+  onWindowState?: (handler: (payload: { maximized?: boolean; float?: boolean }) => void) => () => void;
 };
 
 export function getElectronIpc(): ElectronIpcBridge | null {

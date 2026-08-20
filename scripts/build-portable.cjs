@@ -35,11 +35,8 @@ async function buildExe() {
     process.exit(1);
   }
 
-  // Drop leftover alt output folders from failed/locked builds
-  for (const junk of ['NetSentinel_new', 'NetSentinel_fix', '_staging']) {
-    rmrf(path.join(ROOT, 'release', junk));
-  }
-
+  // Wipe entire release/ so locked alt folders cannot linger
+  rmrf(path.join(ROOT, 'release'));
   fs.mkdirSync(stagingDir, { recursive: true });
 
   try {
@@ -51,6 +48,7 @@ async function buildExe() {
       icon: iconPathNoExt,
       out: stagingDir,
       overwrite: true,
+      prune: true,
       asar: {
         unpack: '**/{GeoLite2-Country.mmdb,*.node}',
         unpackDir: '{**/data,**/node_modules/koffi}',
@@ -66,6 +64,9 @@ async function buildExe() {
         /^\/dist_electron/,
         /^\/canvases/,
         /^\/scripts\/audit-wiring\.cjs$/,
+        /^\/node_modules\/electron($|\/)/,
+        /^\/node_modules\/electron-packager($|\/)/,
+        /^\/node_modules\/\.cache($|\/)/,
       ],
       win32metadata: {
         CompanyName: 'NetSentinel Enterprise',

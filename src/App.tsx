@@ -16,6 +16,7 @@ import { Activity, ShieldAlert, History } from 'lucide-react';
 import { HistoryFeed } from './components/HistoryFeed';
 import { ConfirmHost } from './components/ConfirmHost';
 import { ToastHost } from './components/ToastHost';
+import { FloatingHud } from './components/FloatingHud';
 import { showAppToast } from './ui/toastBus';
 
 const CONFIG_STORAGE_KEY = 'netsentinel-monitoring-config-v2';
@@ -63,6 +64,7 @@ export function App() {
   const [isBlacklistOpen, setIsBlacklistOpen] = useState(false);
   const [mainSection, setMainSection] = useState<'hub' | 'anomalies' | 'history'>('hub');
   const [spikeHistory, setSpikeHistory] = useState<SpikeHistoryEntry[]>([]);
+  const [isFloatMode, setIsFloatMode] = useState(false);
 
   const [config, setConfig] = useState<MonitoringConfig>(() => loadStoredConfig());
 
@@ -99,6 +101,19 @@ export function App() {
     if (!ipc?.onToast) return;
     return ipc.onToast((payload) => {
       showAppToast(payload?.title || 'NetSentinel', payload?.body || '', 'info');
+    });
+  }, []);
+
+  useEffect(() => {
+    const ipc = getElectronIpc();
+    if (!ipc) return;
+    ipc
+      .invoke('window-is-float')
+      .then((r: { float?: boolean }) => setIsFloatMode(!!r?.float))
+      .catch(() => {});
+    if (!ipc.onWindowState) return;
+    return ipc.onWindowState((state) => {
+      if (typeof state?.float === 'boolean') setIsFloatMode(state.float);
     });
   }, []);
 
@@ -190,6 +205,51 @@ export function App() {
     exportAuditReportCsv(allSessions, allProcesses, allGeoNodes);
   };
 
+  const latestPoint =
+    history.length > 0
+      ? history[history.length - 1]
+      : { packetsIn: 0, packetsOut: 0, bytesSec: 0, bytesIn: 0, bytesOut: 0 };
+  const rxBytesPerSec = latestPoint.bytesIn ?? Math.floor((latestPoint.bytesSec || 0) * 0.7);
+  const txBytesPerSec = latestPoint.bytesOut ?? Math.floor((latestPoint.bytesSec || 0) * 0.3);
+
+  const enterFloatMode = () => {
+    const ipc = getElectronIpc();
+    if (!ipc) return;
+    ipc
+      .invoke('window-enter-float')
+      .then((r: { float?: boolean }) => setIsFloatMode(!!r?.float))
+      .catch(() => {});
+  };
+
+  const exitFloatMode = () => {
+    const ipc = getElectronIpc();
+    if (!ipc) return;
+    ipc
+      .invoke('window-exit-float')
+      .then((r: { float?: boolean }) => setIsFloatMode(!!r?.float))
+      .catch(() => {});
+  };
+
+  if (isFloatMode) {
+    return (
+      <div className="h-screen overflow-hidden bg-slate-950 text-slate-100 font-sans antialiased">
+        <FloatingHud
+          isMonitoring={isMonitoring}
+          sessionCount={currentSessions.length}
+          anomalyCount={unresolvedAnomalies.length}
+          rxBytesPerSec={rxBytesPerSec}
+          txBytesPerSec={txBytesPerSec}
+          captureMode={connectionStatus.captureMode}
+          connectionOk={connectionStatus.ok}
+          onExpand={exitFloatMode}
+          onToggleMonitoring={handleToggleMonitoring}
+        />
+        <ConfirmHost />
+        <ToastHost />
+      </div>
+    );
+  }
+
   return (
     <div className="h-screen overflow-hidden bg-slate-950 text-slate-100 flex flex-col font-sans antialiased selection:bg-cyan-500 selection:text-slate-950">
       {/* Integrated desktop title bar + toolbar */}
@@ -206,6 +266,7 @@ export function App() {
         connectionOk={connectionStatus.ok}
         connectionError={connectionStatus.lastError}
         captureMode={connectionStatus.captureMode}
+        onEnterFloat={enterFloatMode}
       />
 
       {/* Main Content Body — only this region scrolls */}

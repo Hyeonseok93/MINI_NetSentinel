@@ -198,6 +198,32 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
             </div>
             <p className="text-[11px] text-slate-500 mt-1">
               Changes which NIC Npcap listens on. Netstat connection list is system-wide.
+              {!adapters.length ? (
+                <>
+                  {' '}
+                  No Npcap adapters? Install from{' '}
+                  <a
+                    href="https://npcap.com/#download"
+                    target="_blank"
+                    rel="noreferrer"
+                    className="text-cyan-400 hover:text-cyan-300 underline underline-offset-2"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      const ipc = getElectronIpc();
+                      if (ipc?.invoke) {
+                        ipc.invoke('open-external-url', 'https://npcap.com/#download').catch(() => {
+                          window.open('https://npcap.com/#download', '_blank');
+                        });
+                      } else {
+                        window.open('https://npcap.com/#download', '_blank');
+                      }
+                    }}
+                  >
+                    npcap.com/#download
+                  </a>
+                  .
+                </>
+              ) : null}
             </p>
           </div>
 

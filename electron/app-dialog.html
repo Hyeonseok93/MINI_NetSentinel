@@ -59,16 +59,18 @@
     }
     .close:hover { background: #1e293b; color: #e2e8f0; }
     .body {
-      flex: 1;
+      flex: 1 1 auto;
       min-height: 0;
-      padding: 16px 14px 16px 18px;
+      padding: 14px 16px;
       overflow: auto;
       font-size: 12px;
       line-height: 1.55;
       color: #cbd5e1;
-      white-space: pre-wrap;
       scrollbar-width: thin;
       scrollbar-color: rgba(71, 85, 105, 0.7) transparent;
+    }
+    #message {
+      white-space: pre-wrap;
     }
     .body::-webkit-scrollbar {
       width: 8px;
@@ -91,12 +93,26 @@
     .body::-webkit-scrollbar-corner {
       background: transparent;
     }
+    .link-row {
+      margin-top: 8px;
+    }
+    .link-row a {
+      color: #22d3ee;
+      font-size: 12px;
+      text-decoration: underline;
+      text-underline-offset: 2px;
+      cursor: pointer;
+      -webkit-app-region: no-drag;
+      word-break: break-all;
+    }
+    .link-row a:hover { color: #67e8f9; }
     .detail {
       margin-top: 12px;
       padding-top: 12px;
       border-top: 1px solid #1e293b;
       color: #64748b;
       font-size: 11px;
+      white-space: pre-wrap;
     }
     .foot {
       display: flex;
@@ -147,22 +163,38 @@
     </div>
     <div class="body">
       <div id="message"></div>
+      <div class="link-row" id="linkRow" hidden>
+        <a id="link" href="#" target="_blank" rel="noreferrer"></a>
+      </div>
       <div class="detail" id="detail" hidden></div>
     </div>
     <div class="foot" id="actions"></div>
   </div>
   <script>
-    const { ipcRenderer } = require('electron');
+    const { ipcRenderer, shell } = require('electron');
     const params = new URLSearchParams(location.search);
     const title = params.get('title') || 'NetSentinel';
     const message = params.get('message') || '';
     const detail = params.get('detail') || '';
+    const linkUrl = params.get('linkUrl') || '';
+    const linkLabel = params.get('linkLabel') || linkUrl;
     const tone = params.get('tone') || 'default';
     let buttons = [];
     try { buttons = JSON.parse(params.get('buttons') || '["OK"]'); } catch (_) { buttons = ['OK']; }
 
     document.getElementById('title').textContent = title;
     document.getElementById('message').textContent = message;
+    const linkRow = document.getElementById('linkRow');
+    const linkEl = document.getElementById('link');
+    if (linkUrl) {
+      linkRow.hidden = false;
+      linkEl.textContent = linkLabel || linkUrl;
+      linkEl.href = linkUrl;
+      linkEl.addEventListener('click', (e) => {
+        e.preventDefault();
+        try { shell.openExternal(linkUrl); } catch (_) {}
+      });
+    }
     const detailEl = document.getElementById('detail');
     if (detail) {
       detailEl.hidden = false;
@@ -170,6 +202,10 @@
     }
 
     const actions = document.getElementById('actions');
+    if (!buttons.length) {
+      actions.style.display = 'none';
+      document.getElementById('xBtn').style.visibility = 'hidden';
+    }
     buttons.forEach((label, idx) => {
       const btn = document.createElement('button');
       btn.className = 'action';
@@ -182,6 +218,7 @@
     });
 
     document.getElementById('xBtn').addEventListener('click', () => {
+      if (!buttons.length) return;
       ipcRenderer.send('app-dialog-result', buttons.length > 1 ? buttons.length - 1 : 0);
     });
   </script>

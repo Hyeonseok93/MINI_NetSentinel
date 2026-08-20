@@ -1,7 +1,7 @@
-const { app, BrowserWindow, ipcMain, Tray, Menu, nativeImage } = require('electron');
+const { app, BrowserWindow, ipcMain, Tray, Menu, nativeImage, powerMonitor, screen, shell } = require('electron');
 const path = require('path');
 const fs = require('fs');
-const { execFileSync, spawn } = require('child_process');
+const { execFileSync } = require('child_process');
 const telemetry = require('./scripts/telemetry-core.cjs');
 const firewall = require('./scripts/firewall-windows.cjs');
 
@@ -10,11 +10,24 @@ try {
   app.setName('NetSentinel');
 } catch (_) {}
 
+/** Official Npcap download — do not bundle redistributed installers in-repo. */
+const NPCAP_DOWNLOAD_URL = 'https://npcap.com/#download';
 let splashWindow = null;
 let mainWindow = null;
 let tray = null;
 let isQuitting = false;
 let dialogWindow = null;
+let isFloatMode = false;
+/** @type {{ x: number, y: number, width: number, height: number } | null} */
+let preFloatBounds = null;
+let displayRefreshTimer = null;
+
+const NORMAL_MIN_WIDTH = 1200;
+const NORMAL_MIN_HEIGHT = 760;
+const FLOAT_WIDTH = 380;
+const FLOAT_HEIGHT = 220;
+const FLOAT_MIN_WIDTH = 320;
+const FLOAT_MIN_HEIGHT = 180;
 
 // One instance only — leftover processes were still toasting after "close"
 const gotSingleInstanceLock = app.requestSingleInstanceLock();
@@ -56,6 +69,132 @@ function showMainWindow() {
   if (mainWindow.isMinimized()) mainWindow.restore();
   mainWindow.show();
   mainWindow.focus();
+  scheduleDisplayRefresh('show-main');
+}
+
+/**
+ * After screensaver / sleep / GPU hiccup Windows often leaves a blank
+ * BrowserWindow (only backgroundColor). Force a compositor redraw.
+ */
+function refreshMainWindowSurface(reason = 'refresh', { nudge = true } = {}) {
+  if (!mainWindow || mainWindow.isDestroyed() || isQuitting) return;
+  try {
+    if (!mainWindow.isVisible()) return;
+
+    try {
+      mainWindow.webContents.invalidate();
+    } catch (_) {}
+
+    // 1px bounds nudge wakes DWM/GPU paint after display power cycle
+    if (
+      nudge &&
+      process.platform === 'win32' &&
+      !mainWindow.isMaximized() &&
+      !mainWindow.isFullScreen()
+    ) {
+      const b = mainWindow.getBounds();
+      mainWindow.setBounds({ ...b, width: Math.max(1, b.width + 1) });
+      mainWindow.setBounds(b);
+    }
+
+    console.log('[electron] Display surface refresh:', reason);
+  } catch (err) {
+    console.warn('[electron] Display refresh failed:', err?.message || err);
+  }
+}
+
+function scheduleDisplayRefresh(reason, opts) {
+  if (displayRefreshTimer) clearTimeout(displayRefreshTimer);
+  // Wait for GPU/driver to come back after resume/unlock
+  displayRefreshTimer = setTimeout(() => {
+    displayRefreshTimer = null;
+    refreshMainWindowSurface(reason, opts);
+  }, 450);
+}
+
+function wireDisplayResumeHandlers() {
+  try {
+    powerMonitor.on('resume', () => scheduleDisplayRefresh('power-resume'));
+  } catch (_) {}
+  try {
+    powerMonitor.on('unlock-screen', () => scheduleDisplayRefresh('unlock-screen'));
+  } catch (_) {}
+  try {
+    screen.on('display-metrics-changed', () => scheduleDisplayRefresh('display-metrics'));
+  } catch (_) {}
+
+  // Soft invalidate only — avoid layout nudge on every focus
+  app.on('browser-window-focus', (_evt, win) => {
+    if (win === mainWindow) scheduleDisplayRefresh('window-focus', { nudge: false });
+  });
+
+  app.on('child-process-gone', (_evt, details) => {
+    const typ = String(details?.type || '').toLowerCase();
+    if (typ === 'gpu' || typ === 'utility') {
+      scheduleDisplayRefresh(`child-gone:${typ}`);
+    }
+  });
+}
+
+function emitWindowState(win = mainWindow) {
+  if (!win || win.isDestroyed()) return;
+  try {
+    win.webContents.send('window-state', {
+      maximized: win.isMaximized(),
+      float: isFloatMode,
+    });
+  } catch (_) {}
+}
+
+function enterFloatMode() {
+  if (!mainWindow || mainWindow.isDestroyed()) {
+    return { ok: false, error: 'Main window not active' };
+  }
+  if (isFloatMode) return { ok: true, float: true };
+
+  if (mainWindow.isMaximized()) mainWindow.unmaximize();
+  if (mainWindow.isMinimized()) mainWindow.restore();
+
+  preFloatBounds = mainWindow.getBounds();
+  isFloatMode = true;
+
+  mainWindow.setMinimumSize(FLOAT_MIN_WIDTH, FLOAT_MIN_HEIGHT);
+  mainWindow.setAlwaysOnTop(true, 'floating');
+  mainWindow.setResizable(true);
+  mainWindow.setSize(FLOAT_WIDTH, FLOAT_HEIGHT, true);
+
+  const { width: sw, height: sh } = require('electron').screen.getPrimaryDisplay().workAreaSize;
+  const x = Math.max(12, sw - FLOAT_WIDTH - 24);
+  const y = Math.max(12, sh - FLOAT_HEIGHT - 24);
+  mainWindow.setPosition(x, y, false);
+  mainWindow.show();
+  mainWindow.focus();
+  emitWindowState();
+  return { ok: true, float: true };
+}
+
+function exitFloatMode() {
+  if (!mainWindow || mainWindow.isDestroyed()) {
+    return { ok: false, error: 'Main window not active' };
+  }
+  if (!isFloatMode) return { ok: true, float: false };
+
+  isFloatMode = false;
+  mainWindow.setAlwaysOnTop(false);
+  mainWindow.setMinimumSize(NORMAL_MIN_WIDTH, NORMAL_MIN_HEIGHT);
+
+  if (preFloatBounds) {
+    mainWindow.setBounds(preFloatBounds, false);
+    preFloatBounds = null;
+  } else {
+    mainWindow.setSize(1360, 900, false);
+    mainWindow.center();
+  }
+
+  mainWindow.show();
+  mainWindow.focus();
+  emitWindowState();
+  return { ok: true, float: false };
 }
 
 function hideMainWindowToTray() {
@@ -118,17 +257,116 @@ function isRunningAsAdmin() {
   }
 }
 
-function relaunchAsAdmin() {
-  const exePath = process.execPath;
-  const psExe = path.join(process.env.SystemRoot || 'C:\\Windows', 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe');
-  const escaped = exePath.replace(/'/g, "''");
-  const command = `Start-Process -FilePath '${escaped}' -Verb RunAs`;
+/**
+ * Show a NetSentinel-styled wait dialog, then trigger UAC elevation.
+ * (Previously a blank black BrowserWindow appeared before HTML painted.)
+ */
+async function relaunchAsAdmin() {
+  if (process.platform !== 'win32') {
+    throw new Error('Elevation is only supported on Windows');
+  }
 
-  spawn(psExe, ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-Command', command], {
-    detached: true,
-    stdio: 'ignore',
-    windowsHide: true,
-  }).unref();
+  const exePath = process.execPath;
+  const workDir = path.dirname(exePath);
+  const escapedExe = exePath.replace(/'/g, "''");
+  const escapedCwd = workDir.replace(/'/g, "''");
+
+  let argClause = '';
+  if (!app.isPackaged) {
+    const args = process.argv.slice(1).map((a) => `'${String(a).replace(/'/g, "''")}'`);
+    if (args.length) argClause = ` -ArgumentList @(${args.join(',')})`;
+  }
+
+  const command = [
+    "[Threading.Thread]::CurrentThread.CurrentUICulture = 'en-US';",
+    "$ErrorActionPreference = 'Stop';",
+    `Start-Process -FilePath '${escapedExe}' -WorkingDirectory '${escapedCwd}'${argClause} -Verb RunAs`,
+  ].join(' ');
+
+  const psExe = path.join(
+    process.env.SystemRoot || 'C:\\Windows',
+    'System32',
+    'WindowsPowerShell',
+    'v1.0',
+    'powershell.exe'
+  );
+
+  if (dialogWindow && !dialogWindow.isDestroyed()) {
+    try { dialogWindow.close(); } catch (_) {}
+    dialogWindow = null;
+  }
+
+  const htmlPath = path.join(__dirname, 'electron', 'app-dialog.html');
+  const qs = new URLSearchParams({
+    title: 'Restarting as administrator',
+    message: 'Waiting for the Windows security (UAC) prompt…',
+    detail:
+      'This window stays open while Windows asks for permission.\n' +
+      'Choose Yes to relaunch NetSentinel with administrator rights.',
+    tone: 'warning',
+    buttons: JSON.stringify([]),
+  });
+
+  const waitWin = new BrowserWindow({
+    width: 460,
+    height: 240,
+    resizable: false,
+    minimizable: false,
+    maximizable: false,
+    fullscreenable: false,
+    frame: false,
+    alwaysOnTop: true,
+    skipTaskbar: true,
+    show: false,
+    backgroundColor: '#020617',
+    webPreferences: {
+      nodeIntegration: true,
+      contextIsolation: false,
+      sandbox: false,
+    },
+  });
+  waitWin.setMenuBarVisibility(false);
+
+  try {
+    await waitWin.loadFile(htmlPath, { search: qs.toString() });
+    if (!waitWin.isDestroyed()) {
+      waitWin.show();
+      waitWin.focus();
+    }
+    // Let Chromium paint the dialog before we block on UAC
+    await new Promise((r) => setTimeout(r, 80));
+
+    try {
+      app.releaseSingleInstanceLock();
+    } catch (_) {}
+
+    execFileSync(
+      psExe,
+      ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-WindowStyle', 'Hidden', '-Command', command],
+      {
+        cwd: workDir,
+        timeout: 180000,
+        encoding: 'utf8',
+        windowsHide: true,
+        stdio: ['ignore', 'pipe', 'pipe'],
+      }
+    );
+  } catch (err) {
+    try {
+      app.requestSingleInstanceLock();
+    } catch (_) {}
+    const stderr = err && err.stderr != null ? String(err.stderr) : '';
+    const stdout = err && err.stdout != null ? String(err.stdout) : '';
+    const combined = `${stderr}\n${stdout}\n${(err && err.message) || ''}`;
+    if (/cancel|denied|1223|rejected/i.test(combined)) {
+      throw new Error('Administrator elevation was cancelled.');
+    }
+    throw new Error('Could not restart as administrator.');
+  } finally {
+    try {
+      if (waitWin && !waitWin.isDestroyed()) waitWin.destroy();
+    } catch (_) {}
+  }
 }
 
 /**
@@ -140,6 +378,8 @@ function showAppDialog(options = {}) {
     title = 'NetSentinel',
     message = '',
     detail = '',
+    linkUrl = '',
+    linkLabel = '',
     buttons = ['OK'],
     tone = 'default',
     width = 460,
@@ -157,6 +397,8 @@ function showAppDialog(options = {}) {
       title: String(title),
       message: String(message),
       detail: String(detail || ''),
+      linkUrl: String(linkUrl || ''),
+      linkLabel: String(linkLabel || linkUrl || ''),
       tone: String(tone),
       buttons: JSON.stringify(buttons),
     });
@@ -222,35 +464,50 @@ async function ensureAdminOrPrompt() {
   if (process.platform !== 'win32') return 'elevated';
   if (isRunningAsAdmin()) return 'elevated';
 
-  const choice = await showAppDialog({
-    title: 'Administrator required',
-    message: 'NetSentinel needs administrator privileges for full capture and firewall control.',
-    detail:
-      'Required for:\n' +
-      '• Npcap live packet / byte capture\n' +
-      '• Blacklist → Windows Firewall block/unblock\n\n' +
-      'Restart as admin to enable these features.\n' +
-      'Limited mode keeps Netstat inventory only (firewall rules may not apply).',
-    buttons: ['Restart as Admin', 'Continue Limited'],
-    tone: 'warning',
-    width: 480,
-    height: 400,
-  });
+  while (!isQuitting) {
+    const choice = await showAppDialog({
+      title: 'Administrator required',
+      message: 'NetSentinel needs administrator privileges for full capture and firewall control.',
+      linkUrl: NPCAP_DOWNLOAD_URL,
+      linkLabel: NPCAP_DOWNLOAD_URL,
+      detail:
+        'Required for:\n' +
+        '• Npcap live packet / byte capture\n' +
+        '• Blacklist → Windows Firewall block/unblock\n\n' +
+        'Restart as admin to enable these features.\n' +
+        'Limited mode keeps Netstat inventory only (firewall rules may not apply).',
+      buttons: ['Restart as Admin', 'Continue Limited'],
+      tone: 'warning',
+      width: 500,
+      height: 360,
+    });
 
-  if (choice === 0) {
-    try {
-      relaunchAsAdmin();
-    } catch (err) {
-      await showAppDialog({
-        title: 'Elevation failed',
-        message: (err && err.message) || String(err),
-        buttons: ['OK'],
-        tone: 'danger',
-        height: 220,
-      });
-      return 'continue-limited';
+    if (choice === 0) {
+      try {
+        await relaunchAsAdmin();
+        return 'relaunching';
+      } catch (err) {
+        const cancelled = /cancelled/i.test((err && err.message) || '');
+        await showAppDialog({
+          title: 'Elevation failed',
+          message: cancelled
+            ? 'Administrator elevation was cancelled.'
+            : 'Could not restart as administrator.',
+          detail:
+            'Right-click NetSentinel.exe → Run as administrator.\n\n' +
+            'You can try again, or continue in limited mode.',
+          linkUrl: NPCAP_DOWNLOAD_URL,
+          linkLabel: NPCAP_DOWNLOAD_URL,
+          buttons: ['OK'],
+          tone: 'danger',
+          width: 460,
+          height: 260,
+        });
+        continue;
+      }
     }
-    return 'relaunching';
+
+    return 'continue-limited';
   }
 
   return 'continue-limited';
@@ -332,6 +589,17 @@ ipcMain.handle('show-toast', async (_evt, payload) => {
   return { ok: true, mode: 'in-app' };
 });
 
+const ALLOWED_EXTERNAL_URLS = new Set([NPCAP_DOWNLOAD_URL, 'https://npcap.com/']);
+
+ipcMain.handle('open-external-url', async (_evt, url) => {
+  const target = String(url || '').trim();
+  if (!ALLOWED_EXTERNAL_URLS.has(target)) {
+    return { ok: false, error: 'URL not allowed' };
+  }
+  await shell.openExternal(target);
+  return { ok: true };
+});
+
 function getSenderWindow(evt) {
   return BrowserWindow.fromWebContents(evt.sender);
 }
@@ -350,15 +618,26 @@ ipcMain.handle('window-minimize-to-tray', () => {
 ipcMain.handle('window-maximize-toggle', (evt) => {
   const win = getSenderWindow(evt);
   if (!win || win.isDestroyed()) return { ok: false, maximized: false };
+  if (isFloatMode) {
+    // Maximize not meaningful in float HUD — expand to full UI first
+    exitFloatMode();
+    return { ok: true, maximized: win.isMaximized(), float: false };
+  }
   if (win.isMaximized()) win.unmaximize();
   else win.maximize();
-  return { ok: true, maximized: win.isMaximized() };
+  const maximized = win.isMaximized();
+  emitWindowState(win);
+  return { ok: true, maximized };
 });
 
 ipcMain.handle('window-is-maximized', (evt) => {
   const win = getSenderWindow(evt);
   return { ok: true, maximized: !!(win && !win.isDestroyed() && win.isMaximized()) };
 });
+
+ipcMain.handle('window-enter-float', () => enterFloatMode());
+ipcMain.handle('window-exit-float', () => exitFloatMode());
+ipcMain.handle('window-is-float', () => ({ ok: true, float: isFloatMode }));
 
 ipcMain.handle('window-close', (evt) => {
   const win = getSenderWindow(evt);
@@ -396,8 +675,8 @@ function createMainWindow(iconPath) {
   mainWindow = new BrowserWindow({
     width: 1360,
     height: 900,
-    minWidth: 1200,
-    minHeight: 760,
+    minWidth: NORMAL_MIN_WIDTH,
+    minHeight: NORMAL_MIN_HEIGHT,
     title: 'NetSentinel',
     icon: iconPath,
     show: false,
@@ -417,6 +696,9 @@ function createMainWindow(iconPath) {
     const allowed = url.startsWith('file://');
     if (!allowed) event.preventDefault();
   });
+
+  mainWindow.on('maximize', () => emitWindowState(mainWindow));
+  mainWindow.on('unmaximize', () => emitWindowState(mainWindow));
 
   const distPath1 = path.join(__dirname, 'dist', 'index.html');
   const distPath2 = path.join(process.resourcesPath || '', 'app', 'dist', 'index.html');
@@ -457,6 +739,8 @@ function createMainWindow(iconPath) {
 
 app.whenReady().then(async () => {
   if (!gotSingleInstanceLock) return;
+
+  wireDisplayResumeHandlers();
 
   const adminState = await ensureAdminOrPrompt();
   if (adminState === 'relaunching') {

@@ -4,7 +4,6 @@ import {
   Cpu,
   Minimize2,
   Maximize2,
-  Square,
   X,
   Play,
   Pause,
@@ -12,9 +11,11 @@ import {
   ShieldAlert,
   ShieldCheck,
   ArrowDownToLine,
+  PanelTop,
 } from 'lucide-react';
 import logoImg from '../../public/logo.png';
 import { getElectronIpc } from '../utils/electronIpc';
+import { RestoreIcon } from './icons/RestoreIcon';
 
 interface NavbarProps {
   isMonitoring: boolean;
@@ -29,6 +30,7 @@ interface NavbarProps {
   connectionOk?: boolean;
   connectionError?: string | null;
   captureMode?: 'npcap' | 'netstat' | 'unknown';
+  onEnterFloat?: () => void;
 }
 
 export const Navbar: React.FC<NavbarProps> = ({
@@ -43,6 +45,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   connectionOk = false,
   connectionError = null,
   captureMode = 'unknown',
+  onEnterFloat,
 }) => {
   const [isMaximized, setIsMaximized] = useState(false);
   const hasWindowControls = connectionMode === 'electron' || !!getElectronIpc();
@@ -50,9 +53,17 @@ export const Navbar: React.FC<NavbarProps> = ({
   useEffect(() => {
     const ipc = getElectronIpc();
     if (!ipc) return;
-    ipc.invoke('window-is-maximized').then((r: { maximized?: boolean }) => {
-      setIsMaximized(!!r?.maximized);
-    }).catch(() => {});
+    ipc
+      .invoke('window-is-maximized')
+      .then((r: { maximized?: boolean }) => {
+        setIsMaximized(!!r?.maximized);
+      })
+      .catch(() => {});
+
+    if (!ipc.onWindowState) return;
+    return ipc.onWindowState((state) => {
+      if (typeof state?.maximized === 'boolean') setIsMaximized(state.maximized);
+    });
   }, []);
 
   const bridgeLabel =
@@ -198,6 +209,14 @@ export const Navbar: React.FC<NavbarProps> = ({
               </button>
               <button
                 type="button"
+                onClick={() => onEnterFloat?.()}
+                className="w-11 flex items-center justify-center text-slate-400 hover:bg-violet-950/70 hover:text-violet-300 transition-colors"
+                title="Floating mini HUD (minimal stats)"
+              >
+                <PanelTop className="w-3.5 h-3.5" />
+              </button>
+              <button
+                type="button"
                 onClick={() => winInvoke('window-minimize')}
                 className="w-11 flex items-center justify-center text-slate-400 hover:bg-slate-800 hover:text-slate-100 transition-colors"
                 title="Minimize"
@@ -210,7 +229,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                 className="w-11 flex items-center justify-center text-slate-400 hover:bg-slate-800 hover:text-slate-100 transition-colors"
                 title={isMaximized ? 'Restore' : 'Maximize'}
               >
-                {isMaximized ? <Square className="w-3 h-3" /> : <Maximize2 className="w-3.5 h-3.5" />}
+                {isMaximized ? <RestoreIcon className="w-3.5 h-3.5" /> : <Maximize2 className="w-3.5 h-3.5" />}
               </button>
               <button
                 type="button"
