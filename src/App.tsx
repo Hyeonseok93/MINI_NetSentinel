@@ -18,6 +18,7 @@ import { ConfirmHost } from './components/ConfirmHost';
 import { ToastHost } from './components/ToastHost';
 import { FloatingHud } from './components/FloatingHud';
 import { showAppToast } from './ui/toastBus';
+import { groupProcessesByName, sortGroupedProcessesByBytesDesc } from './utils/groupProcesses';
 
 const CONFIG_STORAGE_KEY = 'netsentinel-monitoring-config-v2';
 
@@ -212,6 +213,11 @@ export function App() {
   const rxBytesPerSec = latestPoint.bytesIn ?? Math.floor((latestPoint.bytesSec || 0) * 0.7);
   const txBytesPerSec = latestPoint.bytesOut ?? Math.floor((latestPoint.bytesSec || 0) * 0.3);
 
+  const topProcess =
+    sortGroupedProcessesByBytesDesc(groupProcessesByName(processBreakdown))[0] ?? null;
+  const topSession =
+    [...currentSessions].sort((a, b) => b.totalBytes - a.totalBytes)[0] ?? null;
+
   const enterFloatMode = () => {
     const ipc = getElectronIpc();
     if (!ipc) return;
@@ -239,8 +245,15 @@ export function App() {
           anomalyCount={unresolvedAnomalies.length}
           rxBytesPerSec={rxBytesPerSec}
           txBytesPerSec={txBytesPerSec}
+          history={history}
           captureMode={connectionStatus.captureMode}
           connectionOk={connectionStatus.ok}
+          topProcessName={topProcess?.processName ?? null}
+          topProcessBytes={topProcess?.totalBytes ?? 0}
+          topIp={topSession?.ip ?? null}
+          topIpBytes={topSession?.totalBytes ?? 0}
+          currentBytesToday={totalBytes}
+          dailyQuotaBytes={dailyQuotaBytes}
           onExpand={exitFloatMode}
           onToggleMonitoring={handleToggleMonitoring}
         />

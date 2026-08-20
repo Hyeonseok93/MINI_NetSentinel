@@ -24,10 +24,10 @@ let displayRefreshTimer = null;
 
 const NORMAL_MIN_WIDTH = 1200;
 const NORMAL_MIN_HEIGHT = 760;
-const FLOAT_WIDTH = 380;
-const FLOAT_HEIGHT = 220;
-const FLOAT_MIN_WIDTH = 320;
-const FLOAT_MIN_HEIGHT = 180;
+const FLOAT_WIDTH = 410;
+const FLOAT_HEIGHT = 370;
+const FLOAT_MIN_WIDTH = 410;
+const FLOAT_MIN_HEIGHT = 370;
 
 // One instance only — leftover processes were still toasting after "close"
 const gotSingleInstanceLock = app.requestSingleInstanceLock();
