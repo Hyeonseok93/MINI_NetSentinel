@@ -6,8 +6,10 @@
   "main": "electron-main.cjs",
   "scripts": {
     "dev": "vite",
-    "build": "tsc && vite build",
-    "build:exe": "node scripts/test-telemetry.cjs && node scripts/download-geoip.cjs && tsc && vite build && node scripts/build-portable.cjs",
+    "build:electron": "node scripts/sync-ipc-channels.cjs && tsc -p tsconfig.electron.json",
+    "prepare": "npm run build:electron",
+    "build": "npm run build:electron && tsc && vite build",
+    "build:exe": "node scripts/test-telemetry.cjs && node scripts/download-geoip.cjs && npm run build:electron && tsc && vite build && node scripts/build-portable.cjs",
     "audit:wiring": "node scripts/audit-wiring.cjs",
     "clean:build": "node scripts/clean-old-builds.cjs",
     "preview": "vite preview"

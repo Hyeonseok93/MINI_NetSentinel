@@ -15,13 +15,45 @@ function read(rel) {
 }
 
 function extractAllowedChannels(preloadSrc) {
+  // Prefer shared JSON (single source of truth)
+  const sharedPath = path.join(root, 'shared', 'ipc-channels.json');
+  if (fs.existsSync(sharedPath)) {
+    const list = JSON.parse(fs.readFileSync(sharedPath, 'utf8'));
+    if (Array.isArray(list) && list.length) return [...list].sort();
+  }
   const m = preloadSrc.match(/allowed\s*=\s*new Set\(\[([\s\S]*?)\]\)/);
   if (!m) throw new Error('Could not parse preload allowlist');
   return [...m[1].matchAll(/'([^']+)'/g)].map((x) => x[1]).sort();
 }
 
-function extractMainHandlers(mainSrc) {
-  return [...mainSrc.matchAll(/ipcMain\.handle\(\s*'([^']+)'/g)].map((x) => x[1]).sort();
+function extractMainHandlers(...sources) {
+  const channels = new Set();
+  for (const src of sources) {
+    for (const m of src.matchAll(/ipcMain\.handle\(\s*'([^']+)'/g)) {
+      channels.add(m[1]);
+    }
+  }
+  return [...channels].sort();
+}
+
+function readElectronSources() {
+  const chunks = [];
+  const pushIfExists = (rel) => {
+    const p = path.join(root, rel);
+    if (fs.existsSync(p)) chunks.push(fs.readFileSync(p, 'utf8'));
+  };
+  pushIfExists('electron/main.ts');
+  pushIfExists('electron/dist/main.js');
+
+  for (const dirRel of ['electron/lib', 'electron/dist/lib']) {
+    const libDir = path.join(root, dirRel);
+    if (!fs.existsSync(libDir)) continue;
+    for (const name of fs.readdirSync(libDir)) {
+      if (!/\.(cjs|js|ts)$/.test(name)) continue;
+      chunks.push(fs.readFileSync(path.join(libDir, name), 'utf8'));
+    }
+  }
+  return chunks;
 }
 
 function extractRendererInvokes(srcRoot) {
@@ -57,7 +89,7 @@ async function main() {
   // 1) IPC matrix
   try {
     const allowed = extractAllowedChannels(read('electron/preload.cjs'));
-    const handlers = extractMainHandlers(read('electron-main.cjs'));
+    const handlers = extractMainHandlers(read('electron-main.cjs'), ...readElectronSources());
     const invokes = extractRendererInvokes(path.join(root, 'src'));
 
     console.log('Preload allowlist:', allowed.join(', '));
@@ -109,15 +141,25 @@ async function main() {
     const app = read('src/App.tsx');
     const settings = read('src/components/SettingsModal.tsx');
     const engine = read('src/services/realPacketEngine.ts');
-    assert(app.includes('applyMonitoringConfig'), 'App.tsx missing applyMonitoringConfig');
+    const engineTree = [
+      engine,
+      ...fs
+        .readdirSync(path.join(root, 'src', 'services', 'packetEngine'))
+        .filter((n) => /\.(ts|tsx|js|cjs)$/.test(n))
+        .map((n) => read(path.join('src', 'services', 'packetEngine', n))),
+    ].join('\n');
+    assert(app.includes('useMonitoringConfig') || app.includes('applyMonitoringConfig'), 'App.tsx missing monitoring config wiring');
     assert(settings.includes('list-capture-adapters'), 'Settings missing list-capture-adapters');
     assert(settings.includes('activeInterface'), 'Settings missing activeInterface save path');
-    assert(engine.includes('set-capture-adapter'), 'Engine missing set-capture-adapter');
+    assert(engineTree.includes('set-capture-adapter'), 'Engine missing set-capture-adapter');
     assert(
-      engine.includes('showAppToast') || engine.includes('show-toast'),
+      engineTree.includes('ToastGate') ||
+        engineTree.includes('toastGate') ||
+        engineTree.includes('setToastNotifier') ||
+        engineTree.includes('setNotifier'),
       'Engine missing in-app toast path'
     );
-    assert(engine.includes('firewall-block-ip'), 'Engine missing firewall-block-ip');
+    assert(engineTree.includes('firewall-block-ip'), 'Engine missing firewall-block-ip');
     assert(engine.includes('spikeThresholdPacketsPerSec'), 'Engine missing spike threshold use');
     assert(engine.includes('autoBlockSuspicious'), 'Engine missing autoBlockSuspicious use');
     assert(engine.includes('notifyOnNewIp'), 'Engine missing notifyOnNewIp use');
@@ -132,10 +174,41 @@ async function main() {
   // 4) GeoIP integrity helpers
   try {
     const dl = read('scripts/download-geoip.cjs');
-    const core = read('scripts/telemetry-core.cjs');
-    assert(dl.includes('sha256') && dl.includes('SHA256 mismatch'), 'download-geoip missing hash verify');
-    assert(core.includes('sha256') && core.includes('SHA256 mismatch'), 'telemetry-core missing hash verify');
+    const geoCore = fs.existsSync(path.join(root, 'scripts', 'lib', 'geoip-core.cjs'))
+      ? read('scripts/lib/geoip-core.cjs')
+      : read('scripts/telemetry-core.cjs');
+    assert(dl.includes('downloadGeoIpDatabase'), 'download-geoip should delegate to telemetry-core');
+    assert(geoCore.includes('sha256') && geoCore.includes('SHA256 mismatch'), 'geoip missing hash verify');
     console.log('✅ GeoIP SHA-256 verify present\n');
+  } catch (err) {
+    failures.push(err.message);
+  }
+
+  // 4b) Shared single-source checks
+  try {
+    const sharedChannels = JSON.parse(read('shared/ipc-channels.json'));
+    const preload = read('electron/preload.cjs');
+    assert(Array.isArray(sharedChannels) && sharedChannels.length > 0, 'shared/ipc-channels.json empty');
+    assert(preload.includes('contextBridge.exposeInMainWorld'), 'preload must expose electronIPC');
+    assert(preload.includes('Object.freeze(['), 'preload must inline IPC channel allowlist');
+    assert(!preload.includes("require('./ipc-allowlist"), 'preload must not sibling-require ipc-allowlist under sandbox/asar');
+    assert(fs.existsSync(path.join(root, 'electron', 'ipc-allowlist.cjs')), 'electron/ipc-allowlist.cjs missing — run sync-ipc-channels');
+    for (const ch of sharedChannels) {
+      assert(preload.includes(`"${ch}"`) || preload.includes(`'${ch}'`), `preload missing channel ${ch}`);
+    }
+    const channelsTs = read('src/ipc/channels.ts');
+    assert(channelsTs.includes('as const'), 'channels.ts must use as const for literal IpcChannel');
+    assert(channelsTs.includes('AUTO-GENERATED'), 'channels.ts should be generated by sync-ipc-channels');
+    for (const ch of sharedChannels) {
+      assert(channelsTs.includes(`"${ch}"`) || channelsTs.includes(`'${ch}'`), `channels.ts missing ${ch}`);
+    }
+    const famous = JSON.parse(read('shared/famous-ips.json'));
+    assert(Array.isArray(famous.defaultTrustedIps), 'famous-ips missing defaultTrustedIps');
+    const ipv4Cjs = read('shared/ipv4.cjs');
+    assert(ipv4Cjs.includes('isValidIpv4'), 'shared ipv4 incomplete');
+    assert(ipv4Cjs.includes('/^\\d{1,3}(\\.\\d{1,3}){3}$/'), 'shared/ipv4.cjs missing octet regex');
+    assert(read('src/utils/ip.ts').includes('shared/ipv4.cjs'), 'src/utils/ip.ts must import shared/ipv4.cjs');
+    console.log('✅ Shared IPC / famous-ips / ipv4 sources present\n');
   } catch (err) {
     failures.push(err.message);
   }

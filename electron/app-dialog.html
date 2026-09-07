@@ -171,7 +171,7 @@
     <div class="foot" id="actions"></div>
   </div>
   <script>
-    const { ipcRenderer, shell } = require('electron');
+    const api = window.netSentinelDialog;
     const params = new URLSearchParams(location.search);
     const title = params.get('title') || 'NetSentinel';
     const message = params.get('message') || '';
@@ -192,7 +192,7 @@
       linkEl.href = linkUrl;
       linkEl.addEventListener('click', (e) => {
         e.preventDefault();
-        try { shell.openExternal(linkUrl); } catch (_) {}
+        if (api?.openExternal) api.openExternal(linkUrl).catch(() => {});
       });
     }
     const detailEl = document.getElementById('detail');
@@ -213,13 +213,13 @@
       if (idx === 0) {
         btn.classList.add(tone === 'danger' ? 'danger' : tone === 'warning' ? 'warning' : 'primary');
       }
-      btn.addEventListener('click', () => ipcRenderer.send('app-dialog-result', idx));
+      btn.addEventListener('click', () => api?.sendResult(idx));
       actions.appendChild(btn);
     });
 
     document.getElementById('xBtn').addEventListener('click', () => {
       if (!buttons.length) return;
-      ipcRenderer.send('app-dialog-result', buttons.length > 1 ? buttons.length - 1 : 0);
+      api?.sendResult(buttons.length > 1 ? buttons.length - 1 : 0);
     });
   </script>
 </body>

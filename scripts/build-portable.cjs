@@ -22,6 +22,59 @@ function moveDir(src, dest) {
   }
 }
 
+/** Paths relative to app root, always with leading `/` and forward slashes. */
+function normalizePackPath(filePath) {
+  return `/${String(filePath).replace(/\\/g, '/').replace(/^\/+/, '')}`;
+}
+
+function shouldIgnore(filePath) {
+  const p = normalizePackPath(filePath);
+
+  // Source maps / TypeScript sources (runtime uses electron/dist + Vite dist)
+  if (p.endsWith('.map')) return true;
+  if (/\.(ts|tsx|mts|cts)$/.test(p) && !p.includes('/node_modules/')) return true;
+
+  const exactDirs = [
+    '/.git',
+    '/.vscode',
+    '/.cursor',
+    '/release',
+    '/dist_portable',
+    '/dist_portable_new',
+    '/dist_portable_v2',
+    '/dist_portable_v3',
+    '/dist_electron',
+    '/canvases',
+    '/src',
+    '/node_modules/electron',
+    '/node_modules/electron-packager',
+    '/node_modules/.cache',
+  ];
+  for (const dir of exactDirs) {
+    if (p === dir || p.startsWith(`${dir}/`)) return true;
+  }
+
+  if (p === '/.cursorignore' || p === '/.gitignore') return true;
+  if (p === '/README.md' || p === '/LICENSE' || p === '/LICENSE.md') return true;
+  if (/^\/tsconfig(\..+)?\.json$/.test(p)) return true;
+  if (p === '/vite.config.ts' || p === '/vite.config.js') return true;
+  if (p === '/index.html') return true; // Vite root; packaged UI is dist/index.html
+  if (p === '/package-lock.json') return true;
+
+  if (p === '/data/my-public-ip.json' || /^\/data\/.+\.sha256$/.test(p)) return true;
+
+  // Dev / build-only scripts (runtime needs telemetry / firewall / npcap / geoip-core)
+  if (
+    /^\/scripts\/(audit-wiring|sync-ipc-channels|test-telemetry|build-portable|clean-old-builds|download-geoip)\.cjs$/.test(
+      p
+    )
+  ) {
+    return true;
+  }
+
+  return false;
+}
+
 async function buildExe() {
   const iconPath = path.join(ROOT, 'public', 'icon.ico');
   const iconPathNoExt = path.join(ROOT, 'public', 'icon');
@@ -33,6 +86,19 @@ async function buildExe() {
   if (!fs.existsSync(iconPath)) {
     console.error('icon.ico does not exist at:', iconPath);
     process.exit(1);
+  }
+
+  const requiredArtifacts = [
+    path.join(ROOT, 'electron', 'dist', 'main.js'),
+    path.join(ROOT, 'electron', 'preload.cjs'),
+    path.join(ROOT, 'electron', 'ipc-allowlist.cjs'),
+    path.join(ROOT, 'dist', 'index.html'),
+  ];
+  for (const p of requiredArtifacts) {
+    if (!fs.existsSync(p)) {
+      console.error('Missing build artifact (run npm run build:exe / build:electron first):', p);
+      process.exit(1);
+    }
   }
 
   // Wipe entire release/ so locked alt folders cannot linger
@@ -50,24 +116,10 @@ async function buildExe() {
       overwrite: true,
       prune: true,
       asar: {
-        unpack: '**/{GeoLite2-Country.mmdb,*.node}',
+        unpack: '**/{GeoLite2-Country.mmdb,*.node,electron/preload.cjs,electron/dialog-preload.cjs}',
         unpackDir: '{**/data,**/node_modules/koffi}',
       },
-      ignore: [
-        /^\/src-tauri/,
-        /^\/\.git/,
-        /^\/release/,
-        /^\/dist_portable/,
-        /^\/dist_portable_new/,
-        /^\/dist_portable_v2/,
-        /^\/dist_portable_v3/,
-        /^\/dist_electron/,
-        /^\/canvases/,
-        /^\/scripts\/audit-wiring\.cjs$/,
-        /^\/node_modules\/electron($|\/)/,
-        /^\/node_modules\/electron-packager($|\/)/,
-        /^\/node_modules\/\.cache($|\/)/,
-      ],
+      ignore: shouldIgnore,
       win32metadata: {
         CompanyName: 'NetSentinel Enterprise',
         FileDescription: 'NetSentinel Enterprise Packet & Threat Sentinel',
