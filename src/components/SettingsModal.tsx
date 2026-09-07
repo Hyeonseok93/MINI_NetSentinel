@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { X, Sliders, Bell, Cpu, ShieldCheck, Globe, RefreshCw, HardDrive, ChevronDown, RotateCcw, History } from 'lucide-react';
 import { MonitoringConfig } from '../types/network';
-import { getElectronIpc } from '../utils/electronIpc';
+import { getElectronIpc, isElectronShell } from '../utils/electronIpc';
 import { askConfirm } from '../ui/confirmBus';
 
 interface SettingsModalProps {
@@ -48,7 +48,15 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 
     const ipc = getElectronIpc();
     if (!ipc) {
-      setLastGeoIpUpdated('GeoIP unavailable (not running in Electron)');
+      if (isElectronShell()) {
+        setLastGeoIpUpdated('IPC bridge missing — rebuild with npm run build:exe');
+        setGeoIpError('Electron preload bridge unavailable');
+        setGeoIpActive(false);
+      } else {
+        setLastGeoIpUpdated('GeoIP unavailable (not running in Electron)');
+        setGeoIpError(null);
+      }
+      setAdapters([]);
       return;
     }
     ipc
@@ -74,7 +82,11 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   const handleUpdateGeoIp = async () => {
     const ipc = getElectronIpc();
     if (!ipc) {
-      setGeoIpError('Electron IPC unavailable');
+      setGeoIpError(
+        isElectronShell()
+          ? 'IPC bridge missing — rebuild with npm run build:exe'
+          : 'Electron IPC unavailable'
+      );
       return;
     }
 

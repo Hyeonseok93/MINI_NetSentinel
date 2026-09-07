@@ -12,8 +12,9 @@ import {
   Gauge,
 } from 'lucide-react';
 import { formatBytes } from '../utils/formatters';
-import { getElectronIpc } from '../utils/electronIpc';
+import { invokeElectron } from '../utils/electronIpc';
 import type { TrafficHistoryPoint } from '../types/network';
+import type { IpcChannel } from '../ipc/channels';
 
 const SPARK_POINTS = 28;
 
@@ -99,7 +100,6 @@ export const FloatingHud: React.FC<FloatingHudProps> = ({
   onExpand,
   onToggleMonitoring,
 }) => {
-  const ipc = getElectronIpc();
   const captureLabel = captureMode === 'npcap' ? 'Npcap' : captureMode === 'netstat' ? 'Netstat' : '—';
 
   const slice = history.slice(-SPARK_POINTS);
@@ -118,8 +118,8 @@ export const FloatingHud: React.FC<FloatingHudProps> = ({
     : 'No active process';
   const talkerIp = topIp ? `${topIp} · ${formatBytes(topIpBytes)}` : 'No active IP';
 
-  const winInvoke = (channel: string) => {
-    ipc?.invoke(channel).catch(() => {});
+  const winInvoke = (channel: IpcChannel) => {
+    invokeElectron(channel).catch(() => {});
   };
 
   return (

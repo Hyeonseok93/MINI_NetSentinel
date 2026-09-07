@@ -11,6 +11,8 @@ function liveNetstatPlugin(): Plugin {
   return {
     name: "live-netstat-plugin",
     configureServer(server) {
+      // Dev-only HTTP mirror of Electron IPC get-live-netstat (same telemetry-core).
+      // Production portable builds use preload IPC only — this path is intentional.
       // Warm GeoIP once for localhost dev (uses bundled data/GeoLite2-Country.mmdb)
       telemetry
         .ensureGeoIp({

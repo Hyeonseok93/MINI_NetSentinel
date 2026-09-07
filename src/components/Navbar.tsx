@@ -14,8 +14,9 @@ import {
   PanelTop,
 } from 'lucide-react';
 import logoImg from '../../public/logo.png';
-import { getElectronIpc } from '../utils/electronIpc';
+import { getElectronIpc, invokeElectron, isElectronShell } from '../utils/electronIpc';
 import { RestoreIcon } from './icons/RestoreIcon';
+import type { IpcChannel } from '../ipc/channels';
 
 interface NavbarProps {
   isMonitoring: boolean;
@@ -24,7 +25,6 @@ interface NavbarProps {
   onOpenTrustedHub: () => void;
   onOpenBlacklist?: () => void;
   onExportReport?: () => void;
-  trustedCount?: number;
   blacklistedCount?: number;
   connectionMode?: 'electron' | 'vite-dev' | 'offline';
   connectionOk?: boolean;
@@ -47,11 +47,17 @@ export const Navbar: React.FC<NavbarProps> = ({
   captureMode = 'unknown',
   onEnterFloat,
 }) => {
+  const [isElectronShellState, setIsElectronShellState] = useState(
+    () => isElectronShell() || !!getElectronIpc()
+  );
+  const [ipcReady, setIpcReady] = useState(() => !!getElectronIpc());
   const [isMaximized, setIsMaximized] = useState(false);
-  const hasWindowControls = connectionMode === 'electron' || !!getElectronIpc();
+  const hasWindowControls = isElectronShellState || connectionMode === 'electron';
 
   useEffect(() => {
     const ipc = getElectronIpc();
+    if (isElectronShell() || ipc) setIsElectronShellState(true);
+    if (ipc) setIpcReady(true);
     if (!ipc) return;
     ipc
       .invoke('window-is-maximized')
@@ -66,26 +72,34 @@ export const Navbar: React.FC<NavbarProps> = ({
     });
   }, []);
 
+  const bridgePresent = isElectronShellState || connectionMode === 'electron' || connectionMode === 'vite-dev';
   const bridgeLabel =
-    connectionMode === 'electron' ? 'Electron' : connectionMode === 'vite-dev' ? 'Vite Dev' : 'No Bridge';
+    connectionMode === 'vite-dev'
+      ? 'Vite Dev'
+      : isElectronShellState || connectionMode === 'electron'
+        ? 'Electron'
+        : 'No Bridge';
   const bridgeClass = connectionOk
     ? 'text-emerald-400'
-    : connectionMode === 'offline'
-      ? 'text-rose-400'
-      : 'text-amber-400';
+    : bridgePresent
+      ? 'text-amber-400'
+      : 'text-rose-400';
   const captureLabel = captureMode === 'npcap' ? 'Npcap' : captureMode === 'netstat' ? 'Netstat' : '—';
   const captureClass =
     captureMode === 'npcap' ? 'text-cyan-400' : captureMode === 'netstat' ? 'text-amber-400' : 'text-slate-500';
 
-  const winInvoke = (channel: string) => {
-    const ipc = getElectronIpc();
-    if (!ipc) return;
-    ipc.invoke(channel).then((r: { maximized?: boolean }) => {
-      if (channel === 'window-maximize-toggle' && typeof r?.maximized === 'boolean') {
-        setIsMaximized(r.maximized);
-      }
-    }).catch(() => {});
+  const winInvoke = (channel: IpcChannel) => {
+    if (!ipcReady) return;
+    invokeElectron(channel)
+      .then((r: { maximized?: boolean }) => {
+        if (channel === 'window-maximize-toggle' && typeof r?.maximized === 'boolean') {
+          setIsMaximized(r.maximized);
+        }
+      })
+      .catch(() => {});
   };
+
+  const windowControlsEnabled = ipcReady;
 
   return (
     <header className="shrink-0 z-40 border-b border-slate-800/90 bg-slate-950/95 select-none">
@@ -198,7 +212,12 @@ export const Navbar: React.FC<NavbarProps> = ({
           </button>
 
           {hasWindowControls && (
-            <div className="flex items-stretch ml-1 pl-1 border-l border-slate-800 h-8">
+            <div
+              className={`flex items-stretch ml-1 pl-1 border-l border-slate-800 h-8 ${
+                windowControlsEnabled ? '' : 'opacity-40 pointer-events-none'
+              }`}
+              title={windowControlsEnabled ? undefined : 'Window controls unavailable (IPC bridge missing)'}
+            >
               <button
                 type="button"
                 onClick={() => winInvoke('window-minimize-to-tray')}

@@ -1,6 +1,7 @@
 import React from 'react';
 import { GroupedProcess, TrafficHistoryPoint } from '../types/network';
 import { formatBytes } from '../utils/formatters';
+import { latestTrafficRates } from '../utils/trafficRates';
 import { Zap, ArrowDownCircle, ArrowUpCircle, Award } from 'lucide-react';
 
 interface BandwidthGaugeCardProps {
@@ -9,10 +10,11 @@ interface BandwidthGaugeCardProps {
 }
 
 export const BandwidthGaugeCard: React.FC<BandwidthGaugeCardProps> = ({ processes, history }) => {
-  const latestPoint = history.length > 0 ? history[history.length - 1] : { packetsIn: 0, packetsOut: 0, bytesSec: 0, bytesIn: 0, bytesOut: 0 };
-  
-  const currentRxSpeed = latestPoint.bytesIn ?? Math.floor(latestPoint.bytesSec * 0.7); // Bytes/sec
-  const currentTxSpeed = latestPoint.bytesOut ?? Math.floor(latestPoint.bytesSec * 0.3); // Bytes/sec
+  const { rxBytesPerSec: currentRxSpeed, txBytesPerSec: currentTxSpeed } = latestTrafficRates(history);
+  const latestPoint =
+    history.length > 0
+      ? history[history.length - 1]
+      : { packetsIn: 0, packetsOut: 0, bytesSec: 0, bytesIn: 0, bytesOut: 0 };
 
   // Top 5 processes sorted by totalBytes
   const topProcesses = [...processes]
