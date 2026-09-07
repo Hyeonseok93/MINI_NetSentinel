@@ -61,7 +61,6 @@ export interface GeoNode {
 }
 
 export interface MonitoringConfig {
-  isMonitoring: boolean;
   spikeThresholdPacketsPerSec: number;
   /** Aggregate chart pkts/s that records a History snapshot */
   historySpikePacketsPerSec: number;

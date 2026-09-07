@@ -1,15 +1,13 @@
 /**
- * Shared IPv4 validation for UI + engine (matches firewall-windows assertIpv4).
+ * Shared IPv4 helper for the renderer — single implementation: shared/ipv4.cjs
+ * (isValidIpv4 / assertIpv4 stay Node-side via scripts/lib/ipv4.cjs)
  */
-function isValidIpv4(ip: string): boolean {
-  if (typeof ip !== 'string') return false;
-  const trimmed = ip.trim();
-  if (!/^\d{1,3}(\.\d{1,3}){3}$/.test(trimmed)) return false;
-  const parts = trimmed.split('.').map((n) => Number(n));
-  return parts.every((n) => Number.isInteger(n) && n >= 0 && n <= 255);
-}
+import ipv4 from '../../shared/ipv4.cjs';
 
-export function normalizeIpv4(ip: string): string | null {
-  const trimmed = String(ip || '').trim();
-  return isValidIpv4(trimmed) ? trimmed : null;
-}
+type Ipv4Api = {
+  normalizeIpv4: (ip: string) => string | null;
+};
+
+const api = ipv4 as Ipv4Api;
+
+export const normalizeIpv4 = api.normalizeIpv4;

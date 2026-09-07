@@ -1,3 +1,8 @@
+/**
+ * In-app confirm dialogs for the React renderer (ConfirmHost).
+ * Main-process / pre-window prompts use Electron showAppDialog instead —
+ * keep both: renderer cannot show OS-styled dialogs before the window exists.
+ */
 export type ConfirmTone = 'default' | 'warning' | 'danger';
 
 export type ConfirmRequest = {

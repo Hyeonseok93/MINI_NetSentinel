@@ -1,37 +1,28 @@
 import { IpSession, AnomalyEvent, TrafficHistoryPoint, ProcessTrafficPoint, GeoNode, BlacklistedIpItem, SpikeHistoryEntry } from '../types/network';
-import { getElectronIpc } from '../utils/electronIpc';
-import { normalizeIpv4 } from '../utils/ip';
+import { getElectronIpc, isElectronShell, warnIpcUnavailable } from '../utils/electronIpc';
 import { groupProcessesByName, sortGroupedProcessesByBytesDesc } from '../utils/groupProcesses';
-import { showAppToast } from '../ui/toastBus';
 import {
-  MAX_ANOMALY_EVENTS,
   MAX_TRAFFIC_HISTORY_UI,
   MAX_SEEN_IPS,
-  DEFAULT_TRUSTED_IPS,
 } from './packetEngine/constants';
-import { extractNativeTraffic, normalizeProtocol, type NativeIpSession } from './packetEngine/nativeSession';
-import { buildSpikeEntry, shouldRecordSpike } from './packetEngine/spikeHistory';
+import { type NativeIpSession } from './packetEngine/nativeSession';
 import { formatClock } from './packetEngine/time';
+import { ingestNativeSessionList } from './packetEngine/sessionIngest';
+import { ToastGate } from './packetEngine/toastGate';
+import { AnomalyStore } from './packetEngine/anomalyStore';
+import { GeoStore } from './packetEngine/geoStore';
+import { FirewallStore, type FirewallDeps } from './packetEngine/firewallStore';
+import { ProcessAccumulator } from './packetEngine/processAccumulator';
+import { TrustStore, type TrustStoreDeps } from './packetEngine/trustStore';
+import { SpikeHistoryStore } from './packetEngine/spikeHistoryStore';
 
 export class RealPacketEngine {
   private sessions: Map<string, IpSession> = new Map();
   private trafficHistory: TrafficHistoryPoint[] = [];
-  private anomalyEvents: AnomalyEvent[] = [];
-  private spikeHistory: SpikeHistoryEntry[] = [];
-  private recentTotalPackets: number[] = [];
-  private lastSpikeRecordAt = 0;
-  private lastProcessDeltas: SpikeHistoryEntry['topProcesses'] = [];
+  private spikes = new SpikeHistoryStore();
   private intervalId: number | null = null;
-  private trustedIps: Set<string> = new Set(DEFAULT_TRUSTED_IPS);
-  /** Built-in defaults shown in Whitelist (same set as initial trustedIps). */
-  private builtInTrustedIps: Set<string> = new Set(DEFAULT_TRUSTED_IPS);
-  private confirmedNormalIps: Set<string> = new Set();
-  private blockedIps: Set<string> = new Set();
-  private blockedIpReasons: Map<string, string> = new Map();
-  private blockedIpAt: Map<string, number> = new Map();
+  private trust = new TrustStore();
   private seenIps: Set<string> = new Set();
-  private verifiedDomains: Map<string, string> = new Map();
-  private trustedDomains: Map<string, string> = new Map();
   private monitoringConfig = {
     spikeThresholdPacketsPerSec: 40,
     historySpikePacketsPerSec: 200,
@@ -39,15 +30,11 @@ export class RealPacketEngine {
     autoBlockSuspicious: false,
     activeInterface: '',
   };
-  private liveProcesses: ProcessTrafficPoint[] = [];
-  private cumulativeProcessMap: Map<string, ProcessTrafficPoint> = new Map();
-  private prevProcessStatsMap: Map<string, { bytesTotal: number; packetsIn: number; packetsOut: number }> = new Map();
-  private cumulativeGeoMap: Map<string, GeoNode> = new Map();
-  private cumulativeCountrySessionsMap: Map<string, Map<string, IpSession>> = new Map();
-  private myPublicGeo: { country: string; countryCode: string } = { country: 'South Korea', countryCode: 'KR' };
-  private suppressToastsUntil = 0;
-  private lastToastAt = 0;
-  private droppedToastCount = 0;
+  private toast = new ToastGate();
+  private anomalies = new AnomalyStore();
+  private geo = new GeoStore();
+  private firewall = new FirewallStore();
+  private processes = new ProcessAccumulator();
   private fetchInFlight = false;
   private listeners: (() => void)[] = [];
   private connectionStatus: {
@@ -60,7 +47,35 @@ export class RealPacketEngine {
 
   constructor() {
     this.initHistory();
-    this.detectMyPublicGeo();
+    void this.geo.detectMyPublicGeo(() => this.notify());
+  }
+
+  private get blockedIps() {
+    return this.firewall.blockedIps;
+  }
+
+  private trustDeps(): TrustStoreDeps {
+    return {
+      sessions: this.sessions,
+      blockedIps: this.blockedIps,
+      notify: () => this.notify(),
+    };
+  }
+
+  private firewallDeps(): FirewallDeps {
+    return {
+      sessions: this.sessions,
+      connectionStatus: this.connectionStatus,
+      applySessionMembership: (ip) => this.applySessionMembership(ip),
+      notify: () => this.notify(),
+      setConnectionStatus: (next) => {
+        this.connectionStatus = next;
+      },
+    };
+  }
+
+  public setToastNotifier(fn: ((title: string, body: string) => void) | null) {
+    this.toast.setNotifier(fn);
   }
 
   public getConnectionStatus() {
@@ -93,57 +108,14 @@ export class RealPacketEngine {
         ipc.invoke('set-capture-adapter', config.activeInterface).catch((err: any) => {
           console.warn('[packet-engine] set-capture-adapter failed:', err);
         });
+      } else if (!ipc && config.activeInterface && isElectronShell()) {
+        warnIpcUnavailable('Capture adapter');
       }
-    }
-  }
-
-  private async notifyToast(title: string, body: string) {
-    if (!this.monitoringConfig.notifyOnNewIp) return;
-    const now = Date.now();
-    if (now < this.suppressToastsUntil) {
-      this.droppedToastCount += 1;
-      return;
-    }
-    // Hard rate-limit: at most one in-app toast / 20s
-    if (now - this.lastToastAt < 20_000) {
-      this.droppedToastCount += 1;
-      return;
-    }
-    this.lastToastAt = now;
-    const extra =
-      this.droppedToastCount > 0 ? ` (+${this.droppedToastCount} more suppressed)` : '';
-    this.droppedToastCount = 0;
-    showAppToast(title, `${body}${extra}`, 'info');
-  }
-
-  private async detectMyPublicGeo() {
-    // Local-first: GeoLite2 mmdb (+ optional DNS for public IP). No remote geo APIs.
-    try {
-      const ipc = this.getElectronIpc();
-      if (ipc) {
-        const geo = await ipc.invoke('my-public-geo');
-        if (geo?.country) {
-          this.myPublicGeo = {
-            country: geo.country,
-            countryCode: geo.countryCode || geo.country_code || 'NET',
-          };
-          this.notify();
-          return;
-        }
-      }
-    } catch (err) {
-      console.warn('[packet-engine] my-public-geo IPC failed:', err);
-    }
-
-    // Vite/dev fallback: timezone only (no third-party HTTP geo)
-    const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
-    if (tz.includes('Seoul') || tz.includes('Korea')) {
-      this.myPublicGeo = { country: 'South Korea', countryCode: 'KR' };
     }
   }
 
   public getMyPublicGeo() {
-    return this.myPublicGeo;
+    return this.geo.myPublicGeo;
   }
 
   private initHistory() {
@@ -164,8 +136,24 @@ export class RealPacketEngine {
   public start(intervalMs: number = 1000) {
     if (this.intervalId !== null) return;
     // First poll dumps every existing connection as "new" — mute OS toasts briefly
-    this.suppressToastsUntil = Date.now() + 8000;
-    this.droppedToastCount = 0;
+    this.toast.muteFor(8000);
+    if (this.ipc()) {
+      this.connectionStatus = {
+        ...this.connectionStatus,
+        mode: 'electron',
+      };
+      this.notify();
+    } else if (isElectronShell()) {
+      this.connectionStatus = {
+        ...this.connectionStatus,
+        mode: 'electron',
+        ok: false,
+        lastError: 'IPC bridge missing — rebuild with npm run build:exe',
+      };
+      warnIpcUnavailable('Telemetry');
+      this.notify();
+    }
+    void this.fetchLiveNativePackets();
     this.intervalId = window.setInterval(() => {
       void this.fetchLiveNativePackets();
     }, intervalMs);
@@ -179,62 +167,7 @@ export class RealPacketEngine {
     this.fetchInFlight = false;
   }
 
-  private ingestProcessPayload(processes: ProcessTrafficPoint[]) {
-    const activeProcs = processes.filter((p) => p.totalPackets > 0);
-    this.liveProcesses = activeProcs;
-
-    const deltas: SpikeHistoryEntry['topProcesses'] = [];
-    processes.forEach((proc) => {
-      const key = `${proc.processName}-${proc.pid}`;
-      const prevStat = this.prevProcessStatsMap.get(key) || { bytesTotal: 0, packetsIn: 0, packetsOut: 0 };
-
-      const deltaBytes = Math.max(0, proc.bytesTotal - prevStat.bytesTotal);
-      const deltaPacketsIn = Math.max(0, proc.packetsIn - prevStat.packetsIn);
-      const deltaPacketsOut = Math.max(0, proc.packetsOut - prevStat.packetsOut);
-      const deltaPackets = deltaPacketsIn + deltaPacketsOut;
-
-      this.prevProcessStatsMap.set(key, {
-        bytesTotal: proc.bytesTotal,
-        packetsIn: proc.packetsIn,
-        packetsOut: proc.packetsOut,
-      });
-
-      if (deltaPackets > 0 || deltaBytes > 0) {
-        deltas.push({
-          processName: proc.processName,
-          packets: deltaPackets,
-          bytes: deltaBytes,
-          iconType: proc.iconType,
-        });
-      }
-
-      if (!this.cumulativeProcessMap.has(key)) {
-        this.cumulativeProcessMap.set(key, { ...proc });
-      } else {
-        const existing = this.cumulativeProcessMap.get(key)!;
-        existing.bytesTotal += deltaBytes;
-        existing.packetsIn += deltaPacketsIn;
-        existing.packetsOut += deltaPacketsOut;
-        existing.totalPackets = existing.packetsIn + existing.packetsOut;
-      }
-    });
-
-    // Merge same processName for cleaner History attribution
-    const byName = new Map<string, SpikeHistoryEntry['topProcesses'][number]>();
-    deltas.forEach((d) => {
-      const prev = byName.get(d.processName);
-      if (!prev) byName.set(d.processName, { ...d });
-      else {
-        prev.packets += d.packets;
-        prev.bytes += d.bytes;
-      }
-    });
-    this.lastProcessDeltas = Array.from(byName.values())
-      .sort((a, b) => b.packets - a.packets || b.bytes - a.bytes)
-      .slice(0, 8);
-  }
-
-  private getElectronIpc(): { invoke: (channel: string, ...args: unknown[]) => Promise<any> } | null {
+  private ipc() {
     return getElectronIpc();
   }
 
@@ -253,14 +186,14 @@ export class RealPacketEngine {
     let gotPayload = false;
 
     // 1) Electron packaged / desktop bridge
-    const ipc = this.getElectronIpc();
+    const ipc = this.ipc();
     if (ipc) {
       try {
         const data = await ipc.invoke('get-live-netstat');
         if (data && typeof data === 'object') {
           gotPayload = true;
           if (Array.isArray(data.sessions)) rawNativeList = data.sessions;
-          if (Array.isArray(data.processes)) this.ingestProcessPayload(data.processes);
+          if (Array.isArray(data.processes)) this.processes.ingest(data.processes);
 
           if (data.ok === false) {
             this.connectionStatus = {
@@ -301,7 +234,7 @@ export class RealPacketEngine {
           gotPayload = true;
           if (Array.isArray(data.sessions)) rawNativeList = data.sessions;
           else if (Array.isArray(data)) rawNativeList = data;
-          if (Array.isArray(data.processes)) this.ingestProcessPayload(data.processes);
+          if (Array.isArray(data.processes)) this.processes.ingest(data.processes);
 
           this.connectionStatus = {
             mode: 'vite-dev',
@@ -335,156 +268,18 @@ export class RealPacketEngine {
 
   private processRawNativeSessions(rawNativeList: NativeIpSession[]) {
     const timeStr = formatClock(new Date(), true);
-    let secPacketsIn = 0;
-    let secPacketsOut = 0;
-    let secBytes = 0;
-    let secBytesIn = 0;
-    let secBytesOut = 0;
-    const ipTickStats: Array<{
-      ip: string;
-      domain?: string;
-      country: string;
-      packets: number;
-      bytes: number;
-      processHint?: string;
-    }> = [];
-
-    if (rawNativeList && rawNativeList.length > 0) {
-      rawNativeList.forEach((native) => {
-        const extracted = extractNativeTraffic(native);
-        const { pIn, pOut, tPackets, bIn, bOut, tBytes, countryCode } = extracted;
-        const lastSeen = extracted.lastSeen || timeStr;
-
-        if (pIn + pOut > 0 || tBytes > 0) {
-          ipTickStats.push({
-            ip: native.ip,
-            domain: native.domain,
-            country: native.country || '—',
-            packets: pIn + pOut,
-            bytes: tBytes,
-            processHint: (native as any).processName || (native as any).process_name,
-          });
-        }
-
-        // ONLY user (or built-in) whitelist — never silent isSafe from telemetry
-        const isBaseline = this.trustedIps.has(native.ip);
-        const isConfirmedNormal = this.confirmedNormalIps.has(native.ip);
-        const isBlocked = this.blockedIps.has(native.ip);
-        const isFirstSeen = !this.seenIps.has(native.ip);
-        this.seenIps.add(native.ip);
-
-        // Unknown IPs stay "new" until Verify Normal / Trust / Block.
-        let resolvedStatus: IpSession['status'] = isBlocked
-          ? 'blocked'
-          : isBaseline || isConfirmedNormal
-            ? 'normal'
-            : 'new';
-
-        const packetsThisSec = pIn + pOut;
-        const isTrafficSpike =
-          packetsThisSec >= this.monitoringConfig.spikeThresholdPacketsPerSec;
-        const isThreatHeuristic = native.status === 'suspicious';
-        if (!isBlocked && !isBaseline && !isConfirmedNormal && (isTrafficSpike || isThreatHeuristic)) {
-          resolvedStatus = 'suspicious';
-          if (isTrafficSpike) {
-            this.triggerAnomaly({
-              id: `anom-spike-${native.ip}-${Date.now()}`,
-              ip: native.ip,
-              timestamp: timeStr,
-              type: 'TRAFFIC_SPIKE',
-              severity: 'high',
-              message: `Traffic spike on ${native.ip}: ${packetsThisSec} pkts/s (threshold ${this.monitoringConfig.spikeThresholdPacketsPerSec})`,
-              resolved: false,
-            });
-          }
-        }
-
-        if (isFirstSeen && !isBaseline && !isConfirmedNormal && !isBlocked) {
-          if (this.monitoringConfig.notifyOnNewIp) {
-            void this.notifyToast(
-              'New IP connection',
-              `${native.ip} (${native.country || 'Unknown'}) port ${native.port}`
-            );
-          }
-          this.triggerAnomaly({
-            id: `anom-new-${native.ip}-${Date.now()}`,
-            ip: native.ip,
-            timestamp: timeStr,
-            type: 'NEW_IP',
-            severity: 'medium',
-            message: `New connection to ${native.ip} (${native.country})`,
-            resolved: false,
-          });
-        }
-
-        const currentSession: IpSession = {
-          id: native.id,
-          ip: native.ip,
-          domain: native.domain,
-          country: native.country,
-          countryCode,
-          packetsIn: pIn,
-          packetsOut: pOut,
-          totalPackets: tPackets,
-          bytesIn: bIn,
-          bytesOut: bOut,
-          totalBytes: tBytes,
-          lastSeen,
-          status: resolvedStatus,
-          protocol: normalizeProtocol(native.protocol),
-          port: native.port,
-          isBaseline,
-        };
-
-        this.sessions.set(native.ip, currentSession);
-
-        const countryKey = currentSession.country || 'Unknown Location';
-        if (!this.cumulativeCountrySessionsMap.has(countryKey)) {
-          this.cumulativeCountrySessionsMap.set(countryKey, new Map());
-        }
-        const countrySessionMap = this.cumulativeCountrySessionsMap.get(countryKey)!;
-        if (!countrySessionMap.has(native.ip)) {
-          countrySessionMap.set(native.ip, { ...currentSession });
-        } else {
-          const existingSess = countrySessionMap.get(native.ip)!;
-          existingSess.packetsIn += pIn;
-          existingSess.packetsOut += pOut;
-          existingSess.totalPackets += tPackets;
-          existingSess.bytesIn += bIn;
-          existingSess.bytesOut += bOut;
-          existingSess.totalBytes += tBytes;
-          existingSess.lastSeen = currentSession.lastSeen;
-          existingSess.country = currentSession.country;
-          existingSess.countryCode = currentSession.countryCode;
-          existingSess.status = currentSession.status;
-        }
-
-        secPacketsIn += pIn;
-        secPacketsOut += pOut;
-        secBytesIn += bIn;
-        secBytesOut += bOut;
-        secBytes += tBytes;
-
-        if (resolvedStatus === 'suspicious' && !isBaseline && !isConfirmedNormal) {
-          if (native.port === 4444) {
-            this.triggerAnomaly({
-              id: `anom-port-${native.ip}-${Date.now()}`,
-              ip: native.ip,
-              timestamp: timeStr,
-              type: 'SUSPICIOUS_PORT',
-              severity: 'high',
-              message: `Unrecognized connection to high-risk IP ${native.ip} (${native.country}) on port 4444`,
-              resolved: false,
-            });
-          }
-
-          // Auto-block only for threat heuristics — never for traffic-spike alone
-          if (this.monitoringConfig.autoBlockSuspicious && !isBlocked && isThreatHeuristic) {
-            void this.blockIp(native.ip, 'Auto-block: suspicious traffic');
-          }
-        }
+    const { secPacketsIn, secPacketsOut, secBytes, secBytesIn, secBytesOut, ipTickStats } =
+      ingestNativeSessionList(rawNativeList ?? [], {
+        timeStr,
+        membershipSets: this.trust.membershipSets(this.blockedIps),
+        seenIps: this.seenIps,
+        monitoringConfig: this.monitoringConfig,
+        anomalies: this.anomalies,
+        toast: this.toast,
+        geo: this.geo,
+        sessions: this.sessions,
+        blockIp: (ip, reason) => void this.blockIp(ip, reason),
       });
-    }
 
     this.trafficHistory.push({
       time: timeStr,
@@ -514,8 +309,8 @@ export class RealPacketEngine {
     if (this.seenIps.size <= MAX_SEEN_IPS) return;
     const keep = new Set<string>();
     this.sessions.forEach((_s, ip) => keep.add(ip));
-    this.trustedIps.forEach((ip) => keep.add(ip));
-    this.confirmedNormalIps.forEach((ip) => keep.add(ip));
+    this.trust.trustedIps.forEach((ip) => keep.add(ip));
+    this.trust.confirmedNormalIps.forEach((ip) => keep.add(ip));
     this.blockedIps.forEach((ip) => keep.add(ip));
     this.seenIps = keep;
   }
@@ -528,74 +323,35 @@ export class RealPacketEngine {
     ipTickStats: SpikeHistoryEntry['topIps'];
   }) {
     const totalPkts = args.secPacketsIn + args.secPacketsOut;
-    this.recentTotalPackets.push(totalPkts);
-    if (this.recentTotalPackets.length > 60) this.recentTotalPackets.shift();
-
-    const last = this.spikeHistory[0];
-    const lastEntryTotal = last ? last.packetsIn + last.packetsOut : null;
-    const now = Date.now();
-
-    if (
-      !shouldRecordSpike({
-        totalPkts,
-        recentTotals: this.recentTotalPackets,
-        historyThreshold: this.monitoringConfig.historySpikePacketsPerSec,
-        lastRecordAt: this.lastSpikeRecordAt,
-        lastEntryTotal,
-        now,
-      })
-    ) {
-      return;
-    }
-
-    const entry = buildSpikeEntry({
-      now,
+    this.spikes.pushRecentTotal(totalPkts);
+    this.spikes.maybeRecord({
+      totalPkts,
+      historyThreshold: this.monitoringConfig.historySpikePacketsPerSec,
+      now: Date.now(),
       timeStr: args.timeStr,
       secPacketsIn: args.secPacketsIn,
       secPacketsOut: args.secPacketsOut,
       secBytes: args.secBytes,
-      totalPkts,
       ipTickStats: args.ipTickStats,
-      liveProcesses: this.liveProcesses,
-      lastProcessDeltas: this.lastProcessDeltas,
+      liveProcesses: this.processes.liveProcesses,
+      lastProcessDeltas: this.processes.lastProcessDeltas,
     });
-
-    this.spikeHistory.unshift(entry);
-    if (this.spikeHistory.length > 200) this.spikeHistory.pop();
-    this.lastSpikeRecordAt = now;
-  }
-
-  private triggerAnomaly(event: AnomalyEvent) {
-    // Dedup by ip+type whether open or acknowledged — Delete is required to allow a fresh event
-    const exists = this.anomalyEvents.some((e) => e.ip === event.ip && e.type === event.type);
-    if (!exists) {
-      this.anomalyEvents.unshift(event);
-      if (this.anomalyEvents.length > MAX_ANOMALY_EVENTS) {
-        this.anomalyEvents.length = MAX_ANOMALY_EVENTS;
-      }
-    }
   }
 
   public resolveAnomaly(id: string) {
-    const anom = this.anomalyEvents.find((a) => a.id === id);
-    if (anom) {
-      anom.resolved = true;
+    if (this.anomalies.resolve(id)) {
       this.notify();
     }
   }
 
   public deleteAnomaly(id: string) {
-    const before = this.anomalyEvents.length;
-    this.anomalyEvents = this.anomalyEvents.filter((a) => a.id !== id);
-    if (this.anomalyEvents.length !== before) {
+    if (this.anomalies.delete(id)) {
       this.notify();
     }
   }
 
   public clearResolvedAnomalies() {
-    const before = this.anomalyEvents.length;
-    this.anomalyEvents = this.anomalyEvents.filter((a) => !a.resolved);
-    if (this.anomalyEvents.length !== before) {
+    if (this.anomalies.clearResolved()) {
       this.notify();
     }
   }
@@ -606,124 +362,61 @@ export class RealPacketEngine {
    */
   public async resetAllMonitoringState() {
     const blocked = Array.from(this.blockedIps);
+    const deps = this.firewallDeps();
     for (const ip of blocked) {
       try {
-        await this.unblockIp(ip);
+        await this.firewall.unblockIp(ip, deps);
       } catch {
         // continue — UI state still cleared below
       }
     }
 
-    this.blockedIps.clear();
-    this.blockedIpReasons.clear();
-    this.blockedIpAt.clear();
-    this.confirmedNormalIps.clear();
-    this.verifiedDomains.clear();
+    this.firewall.clearLocal();
     this.seenIps.clear();
-    this.anomalyEvents = [];
-    this.spikeHistory = [];
-    this.recentTotalPackets = [];
-    this.lastSpikeRecordAt = 0;
-    this.lastProcessDeltas = [];
+    this.anomalies.clearAll();
+    this.spikes.clear();
+    this.trust.resetToBuiltIns(this.trustDeps());
 
-    this.trustedIps = new Set(this.builtInTrustedIps);
-    this.trustedDomains.clear();
-
-    this.sessions.forEach((sess, ip) => {
-      if (this.trustedIps.has(ip)) {
-        sess.isBaseline = true;
-        sess.status = 'normal';
-      } else {
-        sess.isBaseline = false;
-        sess.status = 'new';
-      }
-    });
-
-    this.cumulativeProcessMap.clear();
-    this.prevProcessStatsMap.clear();
-    this.cumulativeGeoMap.clear();
-    this.cumulativeCountrySessionsMap.clear();
-    this.liveProcesses = [];
+    this.processes.clearAll();
+    this.geo.clearCumulative();
     this.trafficHistory = [];
     this.initHistory();
 
     // Mute new-IP toasts during the first re-learn burst
-    this.suppressToastsUntil = Date.now() + 8000;
-    this.droppedToastCount = 0;
+    this.toast.muteFor(8000);
 
     this.notify();
   }
 
   public removeTrustedIp(ip: string) {
-    this.trustedIps.delete(ip);
-    this.trustedDomains.delete(ip);
-    this.applySessionMembership(ip);
-    this.notify();
+    this.trust.removeTrustedIp(ip, this.trustDeps());
   }
 
   public addTrustedIp(ip: string, domain?: string) {
-    const safeIp = normalizeIpv4(ip);
-    if (!safeIp) return;
-    this.trustedIps.add(safeIp);
-    if (domain) this.trustedDomains.set(safeIp, domain);
-    // Keep verified membership so Untrust can return to Verified (not NEW)
-    const sess = this.sessions.get(safeIp);
-    if (sess && domain) sess.domain = domain;
-    this.applySessionMembership(safeIp);
-    this.notify();
+    this.trust.addTrustedIp(ip, domain, this.trustDeps());
   }
 
   public addVerifiedNormalIp(ip: string, domain?: string) {
-    const safeIp = normalizeIpv4(ip);
-    if (!safeIp) return;
-    this.confirmedNormalIps.add(safeIp);
-    if (domain) this.verifiedDomains.set(safeIp, domain);
-    this.trustedIps.delete(safeIp);
-    this.trustedDomains.delete(safeIp);
-    const sess = this.sessions.get(safeIp);
-    if (sess && domain) sess.domain = domain;
-    this.applySessionMembership(safeIp);
-    this.notify();
+    this.trust.addVerifiedNormalIp(ip, domain, this.trustDeps());
   }
 
   public resetNormalStatus(ip: string) {
-    const safeIp = normalizeIpv4(ip);
-    if (!safeIp) return;
-    this.confirmedNormalIps.delete(safeIp);
-    this.verifiedDomains.delete(safeIp);
-    this.applySessionMembership(safeIp);
-    this.notify();
+    this.trust.resetNormalStatus(ip, this.trustDeps());
   }
 
   /** Clear user-added Trusted entries; keep built-in defaults. */
   public clearTrustedList() {
-    const keep = new Set(this.builtInTrustedIps);
-    Array.from(this.trustedIps).forEach((ip) => {
-      if (!keep.has(ip)) this.removeTrustedIp(ip);
-    });
-    this.notify();
+    this.trust.clearTrustedList(this.trustDeps());
   }
 
   /** Clear all Verified Normal entries (back to NEW unless Trusted/Blocked). */
   public clearVerifiedList() {
-    Array.from(this.confirmedNormalIps).forEach((ip) => {
-      this.resetNormalStatus(ip);
-    });
-    this.verifiedDomains.clear();
-    this.notify();
+    this.trust.clearVerifiedList(this.trustDeps());
   }
 
   /** Unblock every blacklisted IP (firewall + UI). */
   public async clearBlacklist() {
-    const blocked = Array.from(this.blockedIps);
-    for (const ip of blocked) {
-      try {
-        await this.unblockIp(ip);
-      } catch {
-        // continue
-      }
-    }
-    this.notify();
+    await this.firewall.clearAll(this.firewallDeps());
   }
 
   public getSessions(): IpSession[] {
@@ -736,195 +429,72 @@ export class RealPacketEngine {
   }
 
   public getAnomalyEvents(): AnomalyEvent[] {
-    return this.anomalyEvents;
+    return this.anomalies.events;
   }
 
   public getSpikeHistory(): SpikeHistoryEntry[] {
-    return this.spikeHistory.slice();
+    return this.spikes.entries.slice();
   }
 
   public clearSpikeHistory() {
-    if (this.spikeHistory.length === 0) return;
-    this.spikeHistory = [];
+    if (this.spikes.entries.length === 0) return;
+    this.spikes.clearEntriesOnly();
     this.notify();
   }
 
   public deleteSpikeHistory(id: string) {
-    const before = this.spikeHistory.length;
-    this.spikeHistory = this.spikeHistory.filter((e) => e.id !== id);
-    if (this.spikeHistory.length !== before) this.notify();
+    if (this.spikes.delete(id)) this.notify();
   }
 
   public getBlacklistedIps(): BlacklistedIpItem[] {
-    const list: BlacklistedIpItem[] = [];
-    this.blockedIps.forEach((ip) => {
-      list.push({
-        ip,
-        reason: this.blockedIpReasons.get(ip) || 'Blocked by Firewall Policy',
-        blockedAt: this.blockedIpAt.get(ip) || Date.now(),
-      });
-    });
-    return list;
+    return this.firewall.list();
   }
 
   public async blockIp(ip: string, reason: string = 'Manual Security Block') {
-    const safeIp = normalizeIpv4(ip);
-    if (!safeIp) {
-      this.connectionStatus = {
-        ...this.connectionStatus,
-        lastError: `Invalid IPv4 address: ${ip}`,
-      };
-      this.notify();
-      return { ok: false, error: `Invalid IPv4 address: ${ip}` };
-    }
-    const safeReason = String(reason || 'Manual Security Block').slice(0, 120);
-
-    const applyLocalBlock = () => {
-      this.blockedIps.add(safeIp);
-      this.blockedIpReasons.set(safeIp, safeReason);
-      if (!this.blockedIpAt.has(safeIp)) {
-        this.blockedIpAt.set(safeIp, Date.now());
-      }
-      const sess = this.sessions.get(safeIp);
-      if (sess) sess.status = 'blocked';
-    };
-
-    const rollbackLocalBlock = () => {
-      this.blockedIps.delete(safeIp);
-      this.blockedIpReasons.delete(safeIp);
-      this.blockedIpAt.delete(safeIp);
-      this.applySessionMembership(safeIp);
-    };
-
-    applyLocalBlock();
-    this.notify();
-
-    const ipc = this.getElectronIpc();
-    if (ipc) {
-      try {
-        const result = await ipc.invoke('firewall-block-ip', safeIp, safeReason);
-        if (result && result.ok === false) {
-          rollbackLocalBlock();
-          this.connectionStatus = {
-            ...this.connectionStatus,
-            lastError: result.error || 'Firewall block failed',
-          };
-          this.notify();
-        }
-        return result;
-      } catch (err: any) {
-        rollbackLocalBlock();
-        this.connectionStatus = {
-          ...this.connectionStatus,
-          lastError: err?.message || 'Firewall block IPC failed',
-        };
-        this.notify();
-        return { ok: false, error: err?.message || String(err) };
-      }
-    }
-    // No IPC (browser/dev): keep UI-only block
-    return { ok: false, error: 'Firewall IPC unavailable (UI-only block applied)' };
+    return this.firewall.blockIp(ip, reason, this.firewallDeps());
   }
 
   public async unblockIp(ip: string) {
-    const safeIp = normalizeIpv4(ip);
-    if (!safeIp) {
-      return { ok: false, error: `Invalid IPv4 address: ${ip}` };
-    }
-    this.blockedIps.delete(safeIp);
-    this.blockedIpReasons.delete(safeIp);
-    this.blockedIpAt.delete(safeIp);
-    this.applySessionMembership(safeIp);
-    this.notify();
-
-    const ipc = this.getElectronIpc();
-    if (ipc) {
-      try {
-        return await ipc.invoke('firewall-unblock-ip', safeIp);
-      } catch (err: any) {
-        return { ok: false, error: err?.message || String(err) };
-      }
-    }
-    return { ok: false, error: 'Firewall IPC unavailable (UI-only unblock applied)' };
+    return this.firewall.unblockIp(ip, this.firewallDeps());
   }
 
   public async toggleBlockIp(ip: string) {
-    const safeIp = normalizeIpv4(ip);
-    if (!safeIp) return { ok: false, error: `Invalid IPv4 address: ${ip}` };
-    if (this.blockedIps.has(safeIp)) {
-      return this.unblockIp(safeIp);
-    }
-    return this.blockIp(safeIp, 'User Blocked');
+    return this.firewall.toggleBlockIp(ip, this.firewallDeps());
   }
 
   public getProcessBreakdown(): ProcessTrafficPoint[] {
-    return this.liveProcesses;
+    return this.processes.liveProcesses;
   }
 
   public getCumulativeProcessBreakdown(): ProcessTrafficPoint[] {
-    return Array.from(this.cumulativeProcessMap.values()).sort((a, b) => b.bytesTotal - a.bytesTotal);
+    return Array.from(this.processes.cumulativeProcessMap.values()).sort((a, b) => b.bytesTotal - a.bytesTotal);
   }
 
   public clearCumulativeProcesses() {
-    this.cumulativeProcessMap.clear();
+    this.processes.clearCumulative();
     this.notify();
   }
 
   public getGroupedCumulativeProcesses(): import('../types/network').GroupedProcess[] {
     return sortGroupedProcessesByBytesDesc(
-      groupProcessesByName(Array.from(this.cumulativeProcessMap.values()))
+      groupProcessesByName(Array.from(this.processes.cumulativeProcessMap.values()))
     );
   }
 
   public getGeoNodes(): GeoNode[] {
-    const geoMap = new Map<string, { count: number; bytes: number; code: string }>();
-    this.sessions.forEach((sess) => {
-      const c = sess.country || 'Unknown Location';
-      const code = sess.countryCode || (c === 'South Korea' ? 'KR' : c === 'United States' ? 'US' : 'NET');
-      const existing = geoMap.get(c) || { count: 0, bytes: 0, code };
-      existing.count += 1;
-      existing.bytes += sess.totalBytes;
-      if (code && code !== 'NET') existing.code = code;
-      geoMap.set(c, existing);
-    });
-
-    const result: GeoNode[] = [];
-    geoMap.forEach((val, country) => {
-      const nodeItem: GeoNode = {
-        country,
-        countryCode: val.code || 'NET',
-        activeIpCount: val.count,
-        totalBytes: val.bytes,
-      };
-      result.push(nodeItem);
-
-      // Keep cumulative geo alive (was broken after Electron migration)
-      if (!this.cumulativeGeoMap.has(country)) {
-        this.cumulativeGeoMap.set(country, { ...nodeItem });
-      } else {
-        const cNode = this.cumulativeGeoMap.get(country)!;
-        cNode.activeIpCount = Math.max(cNode.activeIpCount, val.count);
-        cNode.totalBytes = Math.max(cNode.totalBytes, val.bytes);
-        if (val.code && val.code !== 'NET') cNode.countryCode = val.code;
-      }
-    });
-
-    return result.filter((n) => n.activeIpCount > 0).sort((a, b) => b.activeIpCount - a.activeIpCount);
+    return this.geo.getLiveGeoNodes(this.sessions.values());
   }
 
   public getCumulativeGeoNodes(): GeoNode[] {
-    return Array.from(this.cumulativeGeoMap.values()).sort((a, b) => b.totalBytes - a.totalBytes);
+    return this.geo.getCumulativeGeoNodes();
   }
 
   public getCumulativeGeoSessions(country: string): IpSession[] {
-    const map = this.cumulativeCountrySessionsMap.get(country);
-    if (!map) return [];
-    return Array.from(map.values()).sort((a, b) => b.totalBytes - a.totalBytes);
+    return this.geo.getCumulativeGeoSessions(country);
   }
 
   public clearCumulativeGeoNodes() {
-    this.cumulativeGeoMap.clear();
-    this.cumulativeCountrySessionsMap.clear();
+    this.geo.clearCumulative();
     this.notify();
   }
 
@@ -940,26 +510,8 @@ export class RealPacketEngine {
   }
 
   /** Sync session row flags from trusted / verified / blocked membership sets. */
-  private applySessionMembership(ip: string) {
-    const sess = this.sessions.get(ip);
-    if (!sess) return;
-    if (this.blockedIps.has(ip)) {
-      sess.isBaseline = this.trustedIps.has(ip);
-      sess.status = 'blocked';
-      return;
-    }
-    if (this.trustedIps.has(ip)) {
-      sess.isBaseline = true;
-      sess.status = 'normal';
-      return;
-    }
-    if (this.confirmedNormalIps.has(ip)) {
-      sess.isBaseline = false;
-      sess.status = 'normal';
-      return;
-    }
-    sess.isBaseline = false;
-    sess.status = 'new';
+  private applySessionMembership(ip: string, hints?: { isTrafficSpike?: boolean; isThreatHeuristic?: boolean }) {
+    this.trust.applyToSession(ip, this.trustDeps(), hints);
   }
 
   public verifyAsNormal(ip: string) {
@@ -967,49 +519,15 @@ export class RealPacketEngine {
   }
 
   public toggleBaseline(ip: string) {
-    const safeIp = normalizeIpv4(ip);
-    if (!safeIp) return;
-    if (this.trustedIps.has(safeIp)) {
-      this.trustedIps.delete(safeIp);
-      this.trustedDomains.delete(safeIp);
-    } else {
-      this.trustedIps.add(safeIp);
-      const sess = this.sessions.get(safeIp);
-      if (sess?.domain) this.trustedDomains.set(safeIp, sess.domain);
-    }
-    this.applySessionMembership(safeIp);
-    this.notify();
+    this.trust.toggleBaseline(ip, this.trustDeps());
   }
 
   public getTrustedList() {
-    const trusted: { ip: string; domain?: string; addedAt: string; note?: string }[] = [];
-    this.trustedIps.forEach((ip) => {
-      if (this.blockedIps.has(ip)) return; // blocked rows use Blacklist hub
-      const sess = this.sessions.get(ip);
-      trusted.push({
-        ip,
-        domain: sess?.domain || this.trustedDomains.get(ip),
-        addedAt: sess?.lastSeen || formatClock(new Date(), false),
-        note: this.builtInTrustedIps.has(ip) ? 'Built-in default' : undefined,
-      });
-    });
-    return trusted;
+    return this.trust.getTrustedList(this.trustDeps());
   }
 
   public getConfirmedNormalList() {
-    const list: { ip: string; domain?: string; country: string; lastSeen: string }[] = [];
-    this.confirmedNormalIps.forEach((ip) => {
-      if (this.trustedIps.has(ip)) return; // currently elevated to Trusted
-      if (this.blockedIps.has(ip)) return;
-      const sess = this.sessions.get(ip);
-      list.push({
-        ip,
-        domain: sess?.domain || this.verifiedDomains.get(ip),
-        country: sess?.country || '—',
-        lastSeen: sess?.lastSeen || '—',
-      });
-    });
-    return list;
+    return this.trust.getConfirmedNormalList(this.trustDeps());
   }
 }
 
