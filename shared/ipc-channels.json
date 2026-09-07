@@ -1,0 +1,20 @@
+[
+  "get-live-netstat",
+  "geoip-status",
+  "geoip-update",
+  "capture-status",
+  "firewall-block-ip",
+  "firewall-unblock-ip",
+  "my-public-geo",
+  "list-capture-adapters",
+  "set-capture-adapter",
+  "open-external-url",
+  "window-minimize",
+  "window-minimize-to-tray",
+  "window-maximize-toggle",
+  "window-is-maximized",
+  "window-enter-float",
+  "window-exit-float",
+  "window-is-float",
+  "window-close"
+]

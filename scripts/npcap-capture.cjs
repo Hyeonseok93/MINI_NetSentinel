@@ -1,21 +1,10 @@
-const fs = require('fs');
-const path = require('path');
+/**
+ * Npcap live capture orchestration — bindings/parse live in scripts/lib/.
+ */
 const os = require('os');
-const koffi = require('koffi');
-
-const PCAP_ERRBUF_SIZE = 256;
-const DLT_EN10MB = 1;
-const DLT_RAW = 12;
-const DLT_IPV4 = 228;
-
-let wpcap = null;
-let pcapFindalldevs = null;
-let pcapFreealldevs = null;
-let pcapOpenLive = null;
-let pcapClose = null;
-let pcapNextEx = null;
-let pcapDatalink = null;
-let pcapSetmintocopy = null;
+const bindings = require('./lib/npcap-bindings.cjs');
+const { DLT_EN10MB, createFrameHandler } = require('./lib/npcap-parse.cjs');
+const { rankCaptureDevices } = require('./lib/npcap-devices.cjs');
 
 let captureHandle = null;
 let datalink = DLT_EN10MB;
@@ -40,16 +29,8 @@ const cumulative = new Map();
 /** @type {Map<string, { packetsIn: number, packetsOut: number, bytesIn: number, bytesOut: number }>} */
 let lastSnapshot = new Map();
 
-function findWpcapPath() {
-  const candidates = [
-    path.join(process.env.SystemRoot || 'C:\\Windows', 'System32', 'Npcap', 'wpcap.dll'),
-    path.join(process.env.SystemRoot || 'C:\\Windows', 'System32', 'wpcap.dll'),
-  ];
-  return candidates.find((p) => fs.existsSync(p)) || null;
-}
-
 function isNpcapAvailable() {
-  return Boolean(findWpcapPath());
+  return bindings.isNpcapAvailable();
 }
 
 function refreshLocalIps() {
@@ -63,96 +44,6 @@ function refreshLocalIps() {
       }
     }
   }
-}
-
-function loadWpcap() {
-  if (wpcap) return true;
-  const dllPath = findWpcapPath();
-  if (!dllPath) {
-    startError = 'Npcap wpcap.dll not found';
-    return false;
-  }
-
-  try {
-    // Ensure Packet.dll resolution from Npcap folder
-    const dir = path.dirname(dllPath);
-    try {
-      const kernel32 = koffi.load('kernel32.dll');
-      const SetDllDirectoryW = kernel32.func('int __stdcall SetDllDirectoryW(const char16_t *lpPathName)');
-      SetDllDirectoryW(dir);
-    } catch (_) {}
-
-    wpcap = koffi.load(dllPath);
-
-    const PcapIf = koffi.struct('pcap_if', {
-      next: 'void *',
-      name: 'str',
-      description: 'str',
-      addresses: 'void *',
-      flags: 'uint32',
-    });
-
-    koffi.struct('timeval', {
-      tv_sec: 'long',
-      tv_usec: 'long',
-    });
-
-    const PcapPkthdr = koffi.struct('pcap_pkthdr', {
-      ts: 'timeval',
-      caplen: 'uint32',
-      len: 'uint32',
-    });
-
-    pcapFindalldevs = wpcap.func('int __cdecl pcap_findalldevs(_Out_ void **alldevsp, _Out_ char *errbuf)');
-    pcapFreealldevs = wpcap.func('void __cdecl pcap_freealldevs(void *alldevs)');
-    pcapOpenLive = wpcap.func(
-      'void *__cdecl pcap_open_live(const char *device, int snaplen, int promisc, int to_ms, _Out_ char *errbuf)'
-    );
-    pcapClose = wpcap.func('void __cdecl pcap_close(void *p)');
-    pcapNextEx = wpcap.func(
-      'int __cdecl pcap_next_ex(void *p, _Out_ void **pkt_header, _Out_ void **pkt_data)'
-    );
-    pcapDatalink = wpcap.func('int __cdecl pcap_datalink(void *p)');
-    try {
-      pcapSetmintocopy = wpcap.func('int __cdecl pcap_setmintocopy(void *p, int size)');
-    } catch (_) {
-      pcapSetmintocopy = null;
-    }
-
-    // Keep refs so GC doesn't collect struct types
-    void PcapIf;
-    void PcapPkthdr;
-    return true;
-  } catch (err) {
-    startError = err.message || String(err);
-    wpcap = null;
-    return false;
-  }
-}
-
-function listDevices() {
-  const errbuf = Buffer.alloc(PCAP_ERRBUF_SIZE);
-  const alldevsp = [null];
-  const rc = pcapFindalldevs(alldevsp, errbuf);
-  if (rc !== 0 || !alldevsp[0]) {
-    throw new Error(errbuf.toString('utf8').replace(/\0.*$/, '') || 'pcap_findalldevs failed');
-  }
-
-  const devices = [];
-  let ptr = alldevsp[0];
-  const PcapIf = koffi.type('pcap_if');
-  while (ptr) {
-    const dev = koffi.decode(ptr, PcapIf);
-    if (dev.name) {
-      devices.push({
-        name: dev.name,
-        description: dev.description || '',
-        ptr,
-      });
-    }
-    ptr = dev.next;
-  }
-  return { devices, alldevs: alldevsp[0] };
 }
 
 function addStat(ip, direction, byteLen) {
@@ -171,6 +62,12 @@ function addStat(ip, direction, byteLen) {
   }
   row.lastSeenMs = Date.now();
 }
+
+const { handleFrame } = createFrameHandler({
+  getLocalIpSet: () => localIpSet,
+  addStat,
+  getDatalink: () => datalink,
+});
 
 /**
  * Drop idle / excess IPs from both cumulative and lastSnapshot together.
@@ -202,73 +99,25 @@ function clearCumulativeMaps() {
   lastSnapshot.clear();
 }
 
-function parseIpv4Packet(buf, offset, totalLen) {
-  if (offset + 20 > buf.length) return;
-  const vihl = buf[offset];
-  const version = vihl >> 4;
-  if (version !== 4) return;
-  const ihl = (vihl & 0x0f) * 4;
-  if (ihl < 20 || offset + ihl > buf.length) return;
-
-  const src = `${buf[offset + 12]}.${buf[offset + 13]}.${buf[offset + 14]}.${buf[offset + 15]}`;
-  const dst = `${buf[offset + 16]}.${buf[offset + 17]}.${buf[offset + 18]}.${buf[offset + 19]}`;
-  const payloadLen = Math.max(0, Math.min(totalLen, buf.length - offset));
-
-  const srcLocal = localIpSet.has(src);
-  const dstLocal = localIpSet.has(dst);
-
-  if (srcLocal && !dstLocal) addStat(dst, 'out', payloadLen);
-  else if (!srcLocal && dstLocal) addStat(src, 'in', payloadLen);
-  else if (!srcLocal && !dstLocal) {
-    // Forwarded/other — count both as outbound-ish remote peers
-    addStat(dst, 'out', Math.floor(payloadLen / 2));
-    addStat(src, 'in', Math.ceil(payloadLen / 2));
-  }
-}
-
-function handleFrame(rawBuf, caplen) {
-  const buf = Buffer.isBuffer(rawBuf) ? rawBuf : Buffer.from(rawBuf);
-  const len = Math.min(caplen, buf.length);
-
-  if (datalink === DLT_EN10MB) {
-    if (len < 14) return;
-    const ethertype = buf.readUInt16BE(12);
-    if (ethertype === 0x0800) {
-      parseIpv4Packet(buf, 14, len - 14);
-    } else if (ethertype === 0x8100 && len >= 18) {
-      const inner = buf.readUInt16BE(16);
-      if (inner === 0x0800) parseIpv4Packet(buf, 18, len - 18);
-    }
-  } else if (datalink === DLT_RAW || datalink === DLT_IPV4) {
-    parseIpv4Packet(buf, 0, len);
-  }
-}
-
 function drainPackets(maxPackets = 500) {
   if (!captureHandle) return;
-  const PcapPkthdr = koffi.type('pcap_pkthdr');
   let count = 0;
   while (count < maxPackets) {
-    const hdrPtr = [null];
-    const dataPtr = [null];
-    const rc = pcapNextEx(captureHandle, hdrPtr, dataPtr);
+    const { rc, hdrPtr, dataPtr } = bindings.nextEx(captureHandle);
     if (rc === 0) break;
     if (rc === -1 || rc === -2) break;
     if (!hdrPtr[0] || !dataPtr[0]) break;
 
-    const hdr = koffi.decode(hdrPtr[0], PcapPkthdr);
+    const hdr = bindings.decodePacketHeader(hdrPtr[0]);
     const caplen = Math.min(Number(hdr.caplen) || 0, 65535);
     if (caplen <= 0) continue;
 
     try {
-      const bytes = koffi.decode(dataPtr[0], koffi.array('uint8', caplen));
-      handleFrame(Uint8Array.from(bytes), caplen);
+      handleFrame(bindings.decodePacketBytes(dataPtr[0], caplen), caplen);
     } catch (err) {
-      // Fallback: decode only Ethernet+IP header window
       try {
         const sliceLen = Math.min(caplen, 128);
-        const bytes = koffi.decode(dataPtr[0], koffi.array('uint8', sliceLen));
-        handleFrame(Uint8Array.from(bytes), sliceLen);
+        handleFrame(bindings.decodePacketBytes(dataPtr[0], sliceLen), sliceLen);
       } catch (err2) {
         startError = err2.message || String(err2);
         break;
@@ -294,66 +143,40 @@ function startCapture(options = {}) {
     startError = 'Npcap not installed';
     return { ok: false, mode: 'netstat', error: startError };
   }
-  if (!loadWpcap()) {
+  if (!bindings.loadWpcap()) {
+    startError = bindings.getLoadError();
     return { ok: false, mode: 'netstat', error: startError };
   }
 
   try {
-    const { devices, alldevs } = listDevices();
+    const { devices, alldevs } = bindings.listDevices();
     if (!devices.length) {
-      pcapFreealldevs(alldevs);
+      bindings.freeAllDevs(alldevs);
       startError = 'No capture devices found';
       return { ok: false, mode: 'netstat', error: startError };
     }
 
     const preferred = options.deviceName || preferredDeviceName;
-    const ranked = devices
-      .map((d) => {
-        const desc = `${d.description} ${d.name}`.toLowerCase();
-        let score = 0;
-        if (preferred && (d.name === preferred || d.description === preferred)) score += 1000;
-        if (
-          desc.includes('loopback') ||
-          desc.includes('npcap loopback') ||
-          desc.includes('hyper-v') ||
-          desc.includes('vmware') ||
-          desc.includes('virtualbox') ||
-          desc.includes('bluetooth') ||
-          desc.includes('wan miniport') ||
-          desc.includes('vpn') ||
-          desc.includes('virtual')
-        ) {
-          score -= 100;
-        }
-        if (desc.includes('wi-fi') || desc.includes('wifi') || desc.includes('wlan') || desc.includes('802.11')) score += 40;
-        if (desc.includes('realtek') || desc.includes('intel') || desc.includes('broadcom') || desc.includes('qualcomm')) {
-          score += 35;
-        }
-        if (desc.includes('gbe') || desc.includes('gigabit') || desc.includes('ethernet')) score += 20;
-        if (d.description) score += 5;
-        return { d, score };
-      })
-      .sort((a, b) => b.score - a.score);
+    const ranked = rankCaptureDevices(devices, preferred);
 
     let opened = null;
     let openedMeta = null;
     const errors = [];
 
     for (const { d } of ranked.slice(0, 8)) {
-      const errbuf = Buffer.alloc(PCAP_ERRBUF_SIZE);
       for (const promisc of [0, 1]) {
-        const handle = pcapOpenLive(d.name, 65535, promisc, 10, errbuf);
+        const { handle, error } = bindings.openLive(d.name, 65535, promisc, 10);
         if (handle) {
           opened = handle;
           openedMeta = { ...d, promisc };
           break;
         }
-        errors.push(`${d.description || d.name} (promisc=${promisc}): ${errbuf.toString('utf8').replace(/\0.*$/, '')}`);
+        errors.push(`${d.description || d.name} (promisc=${promisc}): ${error}`);
       }
       if (opened) break;
     }
 
-    pcapFreealldevs(alldevs);
+    bindings.freeAllDevs(alldevs);
 
     if (!opened) {
       startError = errors[0] || 'pcap_open_live failed on all candidate devices';
@@ -363,12 +186,8 @@ function startCapture(options = {}) {
     captureHandle = opened;
     currentDeviceLabel = openedMeta.description || openedMeta.name;
     currentDeviceName = openedMeta.name;
-    datalink = pcapDatalink(captureHandle);
-    if (pcapSetmintocopy) {
-      try {
-        pcapSetmintocopy(captureHandle, 0);
-      } catch (_) {}
-    }
+    datalink = bindings.readDatalink(captureHandle);
+    bindings.setMinToCopy(captureHandle, 0);
 
     started = true;
     pollTimer = setInterval(() => {
@@ -401,9 +220,7 @@ function stopCapture() {
     pollTimer = null;
   }
   if (captureHandle) {
-    try {
-      pcapClose(captureHandle);
-    } catch (_) {}
+    bindings.closeHandle(captureHandle);
     captureHandle = null;
   }
   started = false;
@@ -418,41 +235,15 @@ function getCaptureMode() {
 
 function listCaptureDevices() {
   if (!isNpcapAvailable()) return [];
-  if (!loadWpcap()) return [];
+  if (!bindings.loadWpcap()) return [];
   try {
-    const { devices, alldevs } = listDevices();
-    const scored = devices
-      .map((d) => {
-        const desc = `${d.description} ${d.name}`.toLowerCase();
-        let score = 0;
-        if (
-          desc.includes('loopback') ||
-          desc.includes('npcap loopback') ||
-          desc.includes('hyper-v') ||
-          desc.includes('vmware') ||
-          desc.includes('virtualbox') ||
-          desc.includes('bluetooth') ||
-          desc.includes('wan miniport') ||
-          desc.includes('vpn') ||
-          desc.includes('virtual')
-        ) {
-          score -= 100;
-        }
-        if (desc.includes('wi-fi') || desc.includes('wifi') || desc.includes('wlan') || desc.includes('802.11')) score += 40;
-        if (desc.includes('realtek') || desc.includes('intel') || desc.includes('broadcom') || desc.includes('qualcomm')) {
-          score += 35;
-        }
-        if (desc.includes('gbe') || desc.includes('gigabit') || desc.includes('ethernet')) score += 20;
-        if (d.description) score += 5;
-        return {
-          name: d.name,
-          description: d.description || d.name,
-          score,
-        };
-      })
-      .sort((a, b) => b.score - a.score);
-
-    pcapFreealldevs(alldevs);
+    const { devices, alldevs } = bindings.listDevices();
+    const scored = rankCaptureDevices(devices).map(({ d, score }) => ({
+      name: d.name,
+      description: d.description || d.name,
+      score,
+    }));
+    bindings.freeAllDevs(alldevs);
     return scored.map(({ name, description }) => ({ name, description }));
   } catch {
     return [];

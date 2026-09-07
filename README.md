@@ -1,7 +1,24 @@
-# Tauri + React + Typescript
+# NetSentinel
 
-This template should help get you started developing with Tauri, React and Typescript in Vite.
+Windows Electron + React + Vite network monitor with Npcap capture (Netstat fallback), GeoIP country lookup, and firewall blacklist helpers.
 
-## Recommended IDE Setup
+## Develop
 
-- [VS Code](https://code.visualstudio.com/) + [Tauri](https://marketplace.visualstudio.com/items?itemName=tauri-apps.tauri-vscode) + [rust-analyzer](https://marketplace.visualstudio.com/items?itemName=rust-lang.rust-analyzer)
+```bash
+npm install
+npm run dev
+```
+
+## Portable build
+
+```bash
+npm run build:exe
+```
+
+Output: `release/NetSentinel/NetSentinel.exe` (ship the whole folder).
+
+## Audit
+
+```bash
+npm run audit:wiring
+```
