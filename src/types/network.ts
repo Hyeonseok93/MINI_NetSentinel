@@ -92,7 +92,6 @@ export interface SpikeHistoryEntry {
     country: string;
     packets: number;
     bytes: number;
-    processHint?: string;
   }>;
   topProcesses: Array<{
     processName: string;

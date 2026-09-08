@@ -27,7 +27,6 @@ function loadMembershipModule() {
           ['1.1.1.1', {}, { status: 'normal', isBaseline: false }],
           ['2.2.2.2', { isTrafficSpike: true }, { status: 'suspicious', isBaseline: false }],
           ['2.2.2.2', {}, { status: 'new', isBaseline: false }],
-          ['2.2.2.2', { isThreatHeuristic: true }, { status: 'new', isBaseline: false }],
         ];
         for (const [ip, hints, expected] of cases) {
           const got = resolveSessionMembership(ip, sets, hints);

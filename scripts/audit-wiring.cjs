@@ -170,7 +170,8 @@ async function main() {
     assert(!/\bisThreatHeuristic\b/.test(engineTree), 'Engine still has isThreatHeuristic');
     assert(engineTree.includes('membershipPersistence') || engine.includes('persistMembership'), 'Engine missing membership persistence');
     assert(engine.includes('user-store-set') || read('src/services/userStore.ts').includes('user-store-set'), 'Renderer missing user-store client');
-    assert(!/\blocalStorage\.(get|set)Item\b/.test(read('src/hooks/useMonitoringConfig.ts')), 'monitoring config still uses localStorage');
+    assert(!/\blocalStorage\b/.test(read('src/hooks/useMonitoringConfig.ts')), 'monitoring config still mentions localStorage');
+    assert(!/\blocalStorage\b/.test(read('src/services/packetEngine/membershipPersistence.ts')), 'membership persist still mentions localStorage');
     const persistSrc = read('src/services/packetEngine/membershipPersistence.ts');
     assert(persistSrc.includes('userStoreSet') || persistSrc.includes('user-store'), 'membership persist must use user-store');
     assert(fs.existsSync(path.join(root, 'scripts', 'lib', 'user-store.cjs')), 'scripts/lib/user-store.cjs missing');

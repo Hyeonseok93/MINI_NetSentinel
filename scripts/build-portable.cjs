@@ -71,6 +71,8 @@ function shouldIgnore(filePath) {
   ) {
     return true;
   }
+  if (p === '/scripts/test' || p.startsWith('/scripts/test/')) return true;
+  if (p === '/.github' || p.startsWith('/.github/')) return true;
 
   return false;
 }

@@ -51,9 +51,6 @@ export function ingestNativeSession(native: NativeIpSession, ctx: IngestTickCont
           country: native.country || '—',
           packets: pIn + pOut,
           bytes: tBytes,
-          processHint:
-            (native as { processName?: string; process_name?: string }).processName ||
-            (native as { processName?: string; process_name?: string }).process_name,
         }
       : null;
 

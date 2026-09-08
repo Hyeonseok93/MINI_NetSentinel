@@ -10,7 +10,7 @@ type UserStoreApi = {
 };
 
 /**
- * JSON files under `{userData}/store/` — Electron-side persistence (not renderer localStorage).
+ * JSON files under `{userData}/store/`.
  */
 export function createAppUserStore(userDataPath: string): UserStoreApi {
   const { createUserStore } = nodeRequire(

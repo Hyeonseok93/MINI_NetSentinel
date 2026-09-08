@@ -35,7 +35,7 @@ Output: `release/NetSentinel/NetSentinel.exe` (ship the whole folder).
 - **IPv4 + TCP ESTABLISHED** focused. IPv6 and UDP visibility are weak or absent.
 - **Spike** status means traffic above your packet/s threshold — not malware classification.
 - Blocking is **manual** only (Trusted / Verified / Blacklist). There is no auto threat block.
-- Trusted / Verified / Blacklist and monitoring settings persist as JSON under Electron `userData/store/` (not browser `localStorage`). Blacklist also syncs with NetSentinel-named Windows Firewall rules when possible.
+- Trusted / Verified / Blacklist and monitoring settings persist as JSON under Electron `userData/store/`. Blacklist also syncs with NetSentinel-named Windows Firewall rules when possible.
 - Vite `npm run dev` uses the same store shape under `data/dev-user-store/`.
 
 ## Persistence paths

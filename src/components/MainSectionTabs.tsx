@@ -1,6 +1,6 @@
 import { Activity, History, ShieldAlert } from 'lucide-react';
 import { AnomalyLog } from './AnomalyLog';
-import { EnterpriseHubCard } from './EnterpriseHubCard';
+import { HubCard } from './HubCard';
 import { HistoryFeed } from './HistoryFeed';
 import type { PacketEngineActions } from '../services/packetEngineActions';
 import type {
@@ -98,7 +98,7 @@ export function MainSectionTabs({
       </div>
 
       {mainSection === 'hub' ? (
-        <EnterpriseHubCard
+        <HubCard
           sessions={sessions}
           processes={processBreakdown}
           cumulativeProcesses={cumulativeProcessBreakdown}

@@ -133,9 +133,6 @@ function createUserStore(baseDir) {
     root,
     read,
     write,
-    sanitizeMembership,
-    sanitizeMonitoringConfig,
-    emptyMembership,
   };
 }
 

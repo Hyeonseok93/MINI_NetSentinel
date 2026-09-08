@@ -19,7 +19,7 @@ import {
   SessionFilterType,
 } from './hub/hubTypes';
 
-interface EnterpriseHubCardProps {
+interface HubCardProps {
   sessions: IpSession[];
   processes: ProcessTrafficPoint[];
   cumulativeProcesses?: ProcessTrafficPoint[];
@@ -36,7 +36,7 @@ interface EnterpriseHubCardProps {
   getCumulativeGeoSessions?: (country: string) => IpSession[];
 }
 
-export const EnterpriseHubCard: React.FC<EnterpriseHubCardProps> = ({
+export const HubCard: React.FC<HubCardProps> = ({
   sessions,
   processes,
   cumulativeProcesses = [],

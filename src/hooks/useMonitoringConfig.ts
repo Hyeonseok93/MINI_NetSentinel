@@ -3,9 +3,8 @@ import type { MonitoringConfig } from '../types/network';
 import { getElectronIpcOrWarn } from '../utils/electronIpc';
 import { realPacketEngine as packetEngine } from '../services/realPacketEngine';
 import { userStoreGet, userStoreSet } from '../services/userStore';
-import { ensureUserStoreMigrated } from '../services/packetEngine/membershipPersistence';
 
-export const DEFAULT_MONITORING_CONFIG: MonitoringConfig = {
+const DEFAULT_MONITORING_CONFIG: MonitoringConfig = {
   spikeThresholdPacketsPerSec: 40,
   historySpikePacketsPerSec: 200,
   notifyOnNewIp: false,
@@ -17,16 +16,10 @@ export const DEFAULT_MONITORING_CONFIG: MonitoringConfig = {
 
 function normalizeConfig(raw: unknown): MonitoringConfig {
   if (!raw || typeof raw !== 'object') return { ...DEFAULT_MONITORING_CONFIG };
-  const parsed = raw as Partial<MonitoringConfig> & {
-    isMonitoring?: boolean;
-    autoBlockSuspicious?: boolean;
-  };
-  const { isMonitoring: _ignored, autoBlockSuspicious: _removed, ...rest } = parsed;
-  return { ...DEFAULT_MONITORING_CONFIG, ...rest };
+  return { ...DEFAULT_MONITORING_CONFIG, ...(raw as Partial<MonitoringConfig>) };
 }
 
 async function loadStoredConfig(): Promise<MonitoringConfig> {
-  await ensureUserStoreMigrated();
   try {
     return normalizeConfig(await userStoreGet('monitoring-config'));
   } catch {

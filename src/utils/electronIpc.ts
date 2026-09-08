@@ -50,14 +50,6 @@ export function getElectronIpcOrWarn(feature: string): ElectronIpcBridge | null 
   return null;
 }
 
-export function requireElectronIpc(feature: string): ElectronIpcBridge {
-  const ipc = getElectronIpcOrWarn(feature);
-  if (!ipc) {
-    throw new Error(`${feature}: Electron IPC unavailable`);
-  }
-  return ipc;
-}
-
 export function invokeElectron(channel: IpcChannel, ...args: unknown[]): Promise<any> {
   const ipc = getElectronIpcOrWarn(channel);
   if (!ipc) {

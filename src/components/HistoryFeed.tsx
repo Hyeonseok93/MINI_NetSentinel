@@ -160,7 +160,6 @@ export const HistoryFeed: React.FC<HistoryFeedProps> = ({ entries, onClear, onDe
                                 <div className="text-slate-200 truncate whitespace-nowrap">{ip.ip}</div>
                                 <div className="text-[10px] text-slate-500 truncate whitespace-nowrap">
                                   {ip.domain || ip.country}
-                                  {ip.processHint ? ` · ${ip.processHint}` : ''}
                                 </div>
                               </div>
                               <span className="text-emerald-400 shrink-0 whitespace-nowrap">
