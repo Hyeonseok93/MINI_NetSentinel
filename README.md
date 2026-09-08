@@ -40,8 +40,6 @@ Npcap이 있으면 패킷 바이트까지, 없으면 Netstat로 TCP 연결 목�
   <img src=".github/readme/badges/dark/tailwindcss.png" alt="Tailwind CSS">
 </picture>
 
-Also: Npcap / Netstat, MaxMind GeoLite2-Country.
-
 ## 🖥️ Preview
 
 <p align="center">
