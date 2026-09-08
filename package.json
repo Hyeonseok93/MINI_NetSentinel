@@ -13,6 +13,7 @@
     "audit:wiring": "node scripts/audit-wiring.cjs",
     "audit:offline": "node scripts/audit-wiring.cjs --offline",
     "test": "node --test scripts/test/*.test.cjs",
+    "test:ci": "npm test && npm run audit:offline && npx tsc --noEmit -p tsconfig.json && npm run build:electron",
     "clean:build": "node scripts/clean-old-builds.cjs",
     "preview": "vite preview"
   },

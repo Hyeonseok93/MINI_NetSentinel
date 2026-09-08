@@ -52,4 +52,19 @@ describe('user-store files', () => {
 
     assert.throws(() => store.write('nope', {}), /Unknown user-store key/);
   });
+
+  it('returns empty membership on corrupt JSON', () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ns-store-bad-'));
+    const store = createUserStore(dir);
+    fs.writeFileSync(path.join(dir, 'membership.json'), '{not-json', 'utf8');
+    const loaded = store.read('membership');
+    assert.deepEqual(loaded, { version: 1, trusted: [], verified: [], blocked: [] });
+  });
+
+  it('read misses return null/empty defaults', () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ns-store-empty-'));
+    const store = createUserStore(dir);
+    assert.equal(store.read('monitoring-config'), null);
+    assert.deepEqual(store.read('membership'), { version: 1, trusted: [], verified: [], blocked: [] });
+  });
 });

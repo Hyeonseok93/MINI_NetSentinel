@@ -111,6 +111,7 @@ function createUserStore(baseDir) {
       }
       return raw;
     } catch (err) {
+      if (k === 'membership') return emptyMembership();
       return null;
     }
   }

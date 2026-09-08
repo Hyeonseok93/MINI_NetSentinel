@@ -62,7 +62,8 @@ MIT — see [LICENSE](./LICENSE). Third-party components (Electron, Npcap, MaxMi
 ## Audit / tests
 
 ```bash
-npm test                 # unit tests (IPv4, membership, IPC channel sync)
+npm test                 # unit + portable smoke (smoke skips if no Windows release/)
+npm run test:ci          # test + offline audit + tsc + electron build
 npm run audit:wiring     # full local wiring + live capture smoke (Windows)
 npm run audit:offline    # CI-safe audit without live Npcap
 ```
