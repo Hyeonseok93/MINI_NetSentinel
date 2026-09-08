@@ -2,37 +2,43 @@ import { useCallback, useEffect, useState } from 'react';
 import type { MonitoringConfig } from '../types/network';
 import { getElectronIpcOrWarn } from '../utils/electronIpc';
 import { realPacketEngine as packetEngine } from '../services/realPacketEngine';
-
-const CONFIG_STORAGE_KEY = 'netsentinel-monitoring-config-v2';
+import { userStoreGet, userStoreSet } from '../services/userStore';
+import { ensureUserStoreMigrated } from '../services/packetEngine/membershipPersistence';
 
 export const DEFAULT_MONITORING_CONFIG: MonitoringConfig = {
   spikeThresholdPacketsPerSec: 40,
   historySpikePacketsPerSec: 200,
   notifyOnNewIp: false,
-  autoBlockSuspicious: false,
   refreshIntervalMs: 1000,
   activeInterface: '',
   dailyQuotaValue: 10,
   dailyQuotaUnit: 'GB',
 };
 
-function loadStoredConfig(): MonitoringConfig {
+function normalizeConfig(raw: unknown): MonitoringConfig {
+  if (!raw || typeof raw !== 'object') return { ...DEFAULT_MONITORING_CONFIG };
+  const parsed = raw as Partial<MonitoringConfig> & {
+    isMonitoring?: boolean;
+    autoBlockSuspicious?: boolean;
+  };
+  const { isMonitoring: _ignored, autoBlockSuspicious: _removed, ...rest } = parsed;
+  return { ...DEFAULT_MONITORING_CONFIG, ...rest };
+}
+
+async function loadStoredConfig(): Promise<MonitoringConfig> {
+  await ensureUserStoreMigrated();
   try {
-    const raw = localStorage.getItem(CONFIG_STORAGE_KEY);
-    if (!raw) return { ...DEFAULT_MONITORING_CONFIG };
-    const parsed = JSON.parse(raw) as Partial<MonitoringConfig> & { isMonitoring?: boolean };
-    const { isMonitoring: _ignored, ...rest } = parsed;
-    return { ...DEFAULT_MONITORING_CONFIG, ...rest };
+    return normalizeConfig(await userStoreGet('monitoring-config'));
   } catch {
     return { ...DEFAULT_MONITORING_CONFIG };
   }
 }
 
-function persistConfig(next: MonitoringConfig) {
+async function persistConfig(next: MonitoringConfig): Promise<void> {
   try {
-    localStorage.setItem(CONFIG_STORAGE_KEY, JSON.stringify(next));
+    await userStoreSet('monitoring-config', next);
   } catch {
-    /* ignore quota / private mode */
+    /* ignore */
   }
 }
 
@@ -41,45 +47,55 @@ function applyToEngine(next: MonitoringConfig) {
     spikeThresholdPacketsPerSec: next.spikeThresholdPacketsPerSec,
     historySpikePacketsPerSec: next.historySpikePacketsPerSec,
     notifyOnNewIp: next.notifyOnNewIp,
-    autoBlockSuspicious: next.autoBlockSuspicious,
     ...(next.activeInterface ? { activeInterface: next.activeInterface } : {}),
   });
 }
 
 export function useMonitoringConfig() {
-  const [config, setConfig] = useState<MonitoringConfig>(() => loadStoredConfig());
+  const [config, setConfig] = useState<MonitoringConfig>(() => ({ ...DEFAULT_MONITORING_CONFIG }));
 
   useEffect(() => {
-    applyToEngine(config);
+    let cancelled = false;
+    void (async () => {
+      const loaded = await loadStoredConfig();
+      if (cancelled) return;
+      setConfig(loaded);
+      applyToEngine(loaded);
 
-    const ipc = getElectronIpcOrWarn('Capture settings');
-    if (!ipc?.invoke) return;
-    ipc
-      .invoke('capture-status')
-      .then((status: { deviceName?: string; device?: string }) => {
+      const ipc = getElectronIpcOrWarn('Capture settings');
+      if (!ipc?.invoke) return;
+      try {
+        const status = (await ipc.invoke('capture-status')) as {
+          deviceName?: string;
+          device?: string;
+        };
         const picked = status?.deviceName || status?.device || '';
-        if (!picked) return;
+        if (!picked || cancelled) return;
         setConfig((prev) => {
           if (prev.activeInterface) return prev;
           const next = { ...prev, activeInterface: picked };
-          persistConfig(next);
+          void persistConfig(next);
           return next;
         });
-      })
-      .catch(() => {});
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- bootstrap once
+      } catch {
+        /* ignore */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   const saveConfig = useCallback((newConfig: MonitoringConfig) => {
     setConfig(newConfig);
-    persistConfig(newConfig);
+    void persistConfig(newConfig);
     applyToEngine(newConfig);
   }, []);
 
   const resetToDefaults = useCallback(async () => {
     const next = { ...DEFAULT_MONITORING_CONFIG };
     setConfig(next);
-    persistConfig(next);
+    await persistConfig(next);
     applyToEngine(next);
     const ipc = getElectronIpcOrWarn('Capture settings');
     if (ipc) {

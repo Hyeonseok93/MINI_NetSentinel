@@ -1,6 +1,7 @@
 import { ipcMain, BrowserWindow, shell, app, type IpcMainInvokeEvent } from 'electron';
 import path from 'path';
 import type { FirewallApi, TelemetryApi } from './native-apis';
+import { createAppUserStore } from './user-store';
 
 export type IpcHandlerDeps = {
   telemetry: TelemetryApi;
@@ -29,6 +30,8 @@ export function registerIpcHandlers(deps: IpcHandlerDeps) {
     allowedExternalUrls,
   } = deps;
 
+  const userStore = createAppUserStore(app.getPath('userData'));
+
   function getSenderWindow(evt: IpcMainInvokeEvent) {
     return BrowserWindow.fromWebContents(evt.sender);
   }
@@ -54,6 +57,25 @@ export function registerIpcHandlers(deps: IpcHandlerDeps) {
   ipcMain.handle('firewall-unblock-ip', async (_evt, ip) =>
     firewall.firewallUnblockIp(String(ip || ''))
   );
+
+  ipcMain.handle('firewall-list-blocked', async () => firewall.firewallListBlockedIps());
+
+  ipcMain.handle('user-store-get', async (_evt, key) => {
+    try {
+      return { ok: true, key: String(key || ''), value: userStore.read(String(key || '')) };
+    } catch (err: any) {
+      return { ok: false, error: err?.message || String(err), value: null };
+    }
+  });
+
+  ipcMain.handle('user-store-set', async (_evt, key, value) => {
+    try {
+      userStore.write(String(key || ''), value);
+      return { ok: true, key: String(key || '') };
+    } catch (err: any) {
+      return { ok: false, error: err?.message || String(err) };
+    }
+  });
 
   ipcMain.handle('my-public-geo', async () =>
     telemetry.resolveMyPublicGeo({

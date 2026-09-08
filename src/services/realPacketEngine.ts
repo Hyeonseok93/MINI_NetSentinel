@@ -15,6 +15,13 @@ import { FirewallStore, type FirewallDeps } from './packetEngine/firewallStore';
 import { ProcessAccumulator } from './packetEngine/processAccumulator';
 import { TrustStore, type TrustStoreDeps } from './packetEngine/trustStore';
 import { SpikeHistoryStore } from './packetEngine/spikeHistoryStore';
+import {
+  loadPersistedMembership,
+  savePersistedMembership,
+  type PersistedBlocked,
+  type PersistedTrusted,
+} from './packetEngine/membershipPersistence';
+import { normalizeIpv4 } from '../utils/ip';
 
 export class RealPacketEngine {
   private sessions: Map<string, IpSession> = new Map();
@@ -27,7 +34,6 @@ export class RealPacketEngine {
     spikeThresholdPacketsPerSec: 40,
     historySpikePacketsPerSec: 200,
     notifyOnNewIp: false,
-    autoBlockSuspicious: false,
     activeInterface: '',
   };
   private toast = new ToastGate();
@@ -37,6 +43,7 @@ export class RealPacketEngine {
   private processes = new ProcessAccumulator();
   private fetchInFlight = false;
   private listeners: (() => void)[] = [];
+  private membershipHydrated = false;
   private connectionStatus: {
     mode: 'electron' | 'vite-dev' | 'offline';
     ok: boolean;
@@ -47,7 +54,99 @@ export class RealPacketEngine {
 
   constructor() {
     this.initHistory();
+    void this.bootstrapMembership();
     void this.geo.detectMyPublicGeo(() => this.notify());
+  }
+
+  private async bootstrapMembership() {
+    try {
+      const data = await loadPersistedMembership();
+      for (const entry of data.trusted) {
+        if (this.trust.builtInTrustedIps.has(entry.ip)) continue;
+        this.trust.trustedIps.add(entry.ip);
+        if (entry.domain) this.trust.trustedDomains.set(entry.ip, entry.domain);
+      }
+      for (const entry of data.verified) {
+        this.trust.confirmedNormalIps.add(entry.ip);
+        if (entry.domain) this.trust.verifiedDomains.set(entry.ip, entry.domain);
+      }
+      for (const entry of data.blocked) {
+        this.firewall.blockedIps.add(entry.ip);
+        this.firewall.blockedIpReasons.set(entry.ip, entry.reason);
+        this.firewall.blockedIpAt.set(entry.ip, entry.blockedAt);
+      }
+    } catch {
+      /* start empty on load failure */
+    }
+    this.membershipHydrated = true;
+    this.notify();
+    await this.syncFirewallFromOs();
+  }
+
+  private persistMembership() {
+    if (!this.membershipHydrated) return;
+    const trusted: PersistedTrusted[] = [];
+    this.trust.trustedIps.forEach((ip) => {
+      if (this.trust.builtInTrustedIps.has(ip)) return;
+      const domain = this.trust.trustedDomains.get(ip);
+      trusted.push(domain ? { ip, domain } : { ip });
+    });
+    const verified: PersistedTrusted[] = [];
+    this.trust.confirmedNormalIps.forEach((ip) => {
+      const domain = this.trust.verifiedDomains.get(ip);
+      verified.push(domain ? { ip, domain } : { ip });
+    });
+    const blocked: PersistedBlocked[] = this.firewall.list().map((item) => ({
+      ip: item.ip,
+      reason: item.reason,
+      blockedAt: item.blockedAt,
+    }));
+    void savePersistedMembership({ version: 1, trusted, verified, blocked });
+  }
+
+  /** Merge NetSentinel Windows Firewall rules into UI; re-apply local-only blocks. */
+  private async syncFirewallFromOs() {
+    const ipc = getElectronIpc();
+    if (!ipc) return;
+    try {
+      const result = (await ipc.invoke('firewall-list-blocked')) as {
+        ok?: boolean;
+        ips?: Array<{ ip: string; reason?: string }>;
+      };
+      if (!result?.ok || !Array.isArray(result.ips)) return;
+
+      const osIps = new Set<string>();
+      let changed = false;
+      for (const item of result.ips) {
+        const ip = normalizeIpv4(item.ip);
+        if (!ip) continue;
+        osIps.add(ip);
+        if (!this.firewall.blockedIps.has(ip)) {
+          this.firewall.blockedIps.add(ip);
+          this.firewall.blockedIpReasons.set(
+            ip,
+            String(item.reason || 'Windows Firewall (NetSentinel)').slice(0, 120)
+          );
+          this.firewall.blockedIpAt.set(ip, Date.now());
+          changed = true;
+        }
+      }
+
+      for (const ip of Array.from(this.firewall.blockedIps)) {
+        if (osIps.has(ip)) continue;
+        const reason = this.firewall.blockedIpReasons.get(ip) || 'Restored NetSentinel block';
+        try {
+          await ipc.invoke('firewall-block-ip', ip, reason);
+        } catch {
+          /* best-effort restore */
+        }
+      }
+
+      this.persistMembership();
+      if (changed) this.notify();
+    } catch {
+      /* ignore list/sync failures (non-admin / IPC) */
+    }
   }
 
   private get blockedIps() {
@@ -86,7 +185,6 @@ export class RealPacketEngine {
     spikeThresholdPacketsPerSec?: number;
     historySpikePacketsPerSec?: number;
     notifyOnNewIp?: boolean;
-    autoBlockSuspicious?: boolean;
     activeInterface?: string;
   }) {
     if (typeof config.spikeThresholdPacketsPerSec === 'number') {
@@ -97,9 +195,6 @@ export class RealPacketEngine {
     }
     if (typeof config.notifyOnNewIp === 'boolean') {
       this.monitoringConfig.notifyOnNewIp = config.notifyOnNewIp;
-    }
-    if (typeof config.autoBlockSuspicious === 'boolean') {
-      this.monitoringConfig.autoBlockSuspicious = config.autoBlockSuspicious;
     }
     if (typeof config.activeInterface === 'string') {
       this.monitoringConfig.activeInterface = config.activeInterface;
@@ -278,7 +373,6 @@ export class RealPacketEngine {
         toast: this.toast,
         geo: this.geo,
         sessions: this.sessions,
-        blockIp: (ip, reason) => void this.blockIp(ip, reason),
       });
 
     this.trafficHistory.push({
@@ -385,38 +479,46 @@ export class RealPacketEngine {
     // Mute new-IP toasts during the first re-learn burst
     this.toast.muteFor(8000);
 
+    this.persistMembership();
     this.notify();
   }
 
   public removeTrustedIp(ip: string) {
     this.trust.removeTrustedIp(ip, this.trustDeps());
+    this.persistMembership();
   }
 
   public addTrustedIp(ip: string, domain?: string) {
     this.trust.addTrustedIp(ip, domain, this.trustDeps());
+    this.persistMembership();
   }
 
   public addVerifiedNormalIp(ip: string, domain?: string) {
     this.trust.addVerifiedNormalIp(ip, domain, this.trustDeps());
+    this.persistMembership();
   }
 
   public resetNormalStatus(ip: string) {
     this.trust.resetNormalStatus(ip, this.trustDeps());
+    this.persistMembership();
   }
 
   /** Clear user-added Trusted entries; keep built-in defaults. */
   public clearTrustedList() {
     this.trust.clearTrustedList(this.trustDeps());
+    this.persistMembership();
   }
 
   /** Clear all Verified Normal entries (back to NEW unless Trusted/Blocked). */
   public clearVerifiedList() {
     this.trust.clearVerifiedList(this.trustDeps());
+    this.persistMembership();
   }
 
   /** Unblock every blacklisted IP (firewall + UI). */
   public async clearBlacklist() {
     await this.firewall.clearAll(this.firewallDeps());
+    this.persistMembership();
   }
 
   public getSessions(): IpSession[] {
@@ -450,16 +552,22 @@ export class RealPacketEngine {
     return this.firewall.list();
   }
 
-  public async blockIp(ip: string, reason: string = 'Manual Security Block') {
-    return this.firewall.blockIp(ip, reason, this.firewallDeps());
+  public async blockIp(ip: string, reason: string = 'Manual block') {
+    const result = await this.firewall.blockIp(ip, reason, this.firewallDeps());
+    this.persistMembership();
+    return result;
   }
 
   public async unblockIp(ip: string) {
-    return this.firewall.unblockIp(ip, this.firewallDeps());
+    const result = await this.firewall.unblockIp(ip, this.firewallDeps());
+    this.persistMembership();
+    return result;
   }
 
   public async toggleBlockIp(ip: string) {
-    return this.firewall.toggleBlockIp(ip, this.firewallDeps());
+    const result = await this.firewall.toggleBlockIp(ip, this.firewallDeps());
+    this.persistMembership();
+    return result;
   }
 
   public getProcessBreakdown(): ProcessTrafficPoint[] {
@@ -510,7 +618,7 @@ export class RealPacketEngine {
   }
 
   /** Sync session row flags from trusted / verified / blocked membership sets. */
-  private applySessionMembership(ip: string, hints?: { isTrafficSpike?: boolean; isThreatHeuristic?: boolean }) {
+  private applySessionMembership(ip: string, hints?: { isTrafficSpike?: boolean }) {
     this.trust.applyToSession(ip, this.trustDeps(), hints);
   }
 
@@ -520,6 +628,7 @@ export class RealPacketEngine {
 
   public toggleBaseline(ip: string) {
     this.trust.toggleBaseline(ip, this.trustDeps());
+    this.persistMembership();
   }
 
   public getTrustedList() {

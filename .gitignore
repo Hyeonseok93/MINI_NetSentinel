@@ -21,6 +21,7 @@ data/*.mmdb
 data/*.mmdb.sha256
 data/*.sha256
 data/my-public-ip.json
+data/dev-user-store/
 data/npcap*.exe
 .env
 .env.*

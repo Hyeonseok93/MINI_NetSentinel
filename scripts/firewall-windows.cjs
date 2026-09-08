@@ -1,14 +1,17 @@
-const { assertIpv4 } = require('./lib/ipv4.cjs');
+const { assertIpv4, isValidIpv4 } = require('./lib/ipv4.cjs');
 const { execFile } = require('child_process');
 const util = require('util');
 
 const execFileAsync = util.promisify(execFile);
 
+const RULE_PREFIX_OUT = 'NetSentinel Block OUT ';
+const RULE_PREFIX_IN = 'NetSentinel Block IN ';
+
 function ruleNameOut(ip) {
-  return `NetSentinel Block OUT ${ip}`;
+  return `${RULE_PREFIX_OUT}${ip}`;
 }
 function ruleNameIn(ip) {
-  return `NetSentinel Block IN ${ip}`;
+  return `${RULE_PREFIX_IN}${ip}`;
 }
 
 /** Keep netsh description free of shell/control metacharacters (execFile still benefits). */
@@ -104,9 +107,67 @@ async function firewallUnblockIp(ip) {
   return { ok: true, ip: safeIp };
 }
 
+/**
+ * List IPs currently blocked by NetSentinel-named Windows Firewall rules.
+ * Best-effort parse of `netsh advfirewall firewall show rule name=all`.
+ */
+async function firewallListBlockedIps() {
+  try {
+    const { stdout } = await runNetsh([
+      'advfirewall',
+      'firewall',
+      'show',
+      'rule',
+      'name=all',
+    ]);
+    const text = String(stdout || '');
+    const byIp = new Map();
+    let currentName = '';
+    let currentDesc = '';
+
+    const flush = () => {
+      if (!currentName.startsWith(RULE_PREFIX_OUT)) return;
+      const ip = currentName.slice(RULE_PREFIX_OUT.length).trim();
+      if (!isValidIpv4(ip)) return;
+      if (!byIp.has(ip)) {
+        byIp.set(ip, {
+          ip,
+          reason: currentDesc || 'Windows Firewall (NetSentinel)',
+        });
+      }
+    };
+
+    for (const line of text.split(/\r?\n/)) {
+      const nameMatch = line.match(/^\s*Rule Name:\s*(.+)\s*$/i);
+      if (nameMatch) {
+        flush();
+        currentName = nameMatch[1].trim();
+        currentDesc = '';
+        continue;
+      }
+      const descMatch = line.match(/^\s*Description:\s*(.*)\s*$/i);
+      if (descMatch) {
+        currentDesc = String(descMatch[1] || '').trim();
+      }
+    }
+    flush();
+
+    return { ok: true, ips: Array.from(byIp.values()) };
+  } catch (err) {
+    return {
+      ok: false,
+      ips: [],
+      error: err?.message || String(err),
+    };
+  }
+}
+
 module.exports = {
   firewallBlockIp,
   firewallUnblockIp,
+  firewallListBlockedIps,
   assertIpv4,
   sanitizeReason,
+  RULE_PREFIX_OUT,
+  RULE_PREFIX_IN,
 };

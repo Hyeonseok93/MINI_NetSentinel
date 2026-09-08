@@ -24,4 +24,9 @@ export type TelemetryApi = {
 export type FirewallApi = {
   firewallBlockIp: (ip: string, reason?: string) => Promise<unknown> | unknown;
   firewallUnblockIp: (ip: string) => Promise<unknown> | unknown;
+  firewallListBlockedIps: () => Promise<{ ok: boolean; ips: Array<{ ip: string; reason?: string }>; error?: string }> | {
+    ok: boolean;
+    ips: Array<{ ip: string; reason?: string }>;
+    error?: string;
+  };
 };
