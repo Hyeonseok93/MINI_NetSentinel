@@ -1,10 +1,8 @@
 import {
-  Server,
   Search,
   SlidersHorizontal,
   Zap,
   TrendingUp,
-  Trash2,
 } from 'lucide-react';
 import type {
   AppSortOptionKey,
@@ -26,7 +24,6 @@ type Props = {
   setSessionSubTab: (v: 'live' | 'cumulative') => void;
   liveSessionCount: number;
   cumulativeSessionCount: number;
-  onClearCumulativeSessions?: () => void;
   appSubTab: 'live' | 'cumulative';
   setAppSubTab: (v: 'live' | 'cumulative') => void;
   appSearchTerm: string;
@@ -35,7 +32,6 @@ type Props = {
   setAppSortOption: (v: AppSortOptionKey) => void;
   liveAppCount: number;
   cumulativeAppCount: number;
-  onClearCumulativeProcesses?: () => void;
   geoSubTab: 'live' | 'cumulative';
   setGeoSubTab: (v: 'live' | 'cumulative') => void;
   geoSearchTerm: string;
@@ -45,7 +41,6 @@ type Props = {
   liveGeoCount: number;
   cumulativeGeoCount: number;
   myPublicGeo: { country: string; countryCode: string };
-  onClearCumulativeGeoNodes?: () => void;
 };
 
 export function HubTabControls({
@@ -60,7 +55,6 @@ export function HubTabControls({
   setSessionSubTab,
   liveSessionCount,
   cumulativeSessionCount,
-  onClearCumulativeSessions,
   appSubTab,
   setAppSubTab,
   appSearchTerm,
@@ -69,7 +63,6 @@ export function HubTabControls({
   setAppSortOption,
   liveAppCount,
   cumulativeAppCount,
-  onClearCumulativeProcesses,
   geoSubTab,
   setGeoSubTab,
   geoSearchTerm,
@@ -79,64 +72,44 @@ export function HubTabControls({
   liveGeoCount,
   cumulativeGeoCount,
   myPublicGeo,
-  onClearCumulativeGeoNodes,
 }: Props) {
   if (activeTab === 'sessions') {
     return (
-      <div className="pt-2 flex flex-col gap-3 w-full">
-        <div className="flex flex-col md:flex-row items-center justify-between gap-3 w-full">
-          <div className="flex items-center gap-1.5 bg-slate-950 p-1 rounded-xl border border-slate-800 shrink-0">
-            <button
-              type="button"
-              onClick={() => setSessionSubTab('live')}
-              className={`py-1.5 px-3 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 whitespace-nowrap ${
-                sessionSubTab === 'live'
-                  ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 shadow-sm'
-                  : 'text-slate-400 hover:text-slate-200'
-              }`}
-            >
-              <Zap className="w-3.5 h-3.5" />
-              Live
-              <span className="ml-0.5 px-1.5 py-0.5 rounded-md bg-slate-900/80 text-[10px] font-mono">
-                {liveSessionCount}
-              </span>
+      <div className="pt-2 flex flex-col lg:flex-row items-center justify-between gap-3 w-full">
+        <div className="flex items-center gap-1.5 bg-slate-950 p-1 rounded-xl border border-slate-800 shrink-0">
+          <button
+            type="button"
+            onClick={() => setSessionSubTab('live')}
+            className={`py-1.5 px-3 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 whitespace-nowrap ${
+              sessionSubTab === 'live'
+                ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 shadow-sm'
+                : 'text-slate-400 hover:text-slate-200'
+            }`}
+          >
+            <Zap className="w-3.5 h-3.5 text-cyan-400 animate-pulse shrink-0" />
+            <span>Live Real-time</span>
+            <span className="px-1.5 py-0.2 text-[10px] bg-slate-900 rounded-full text-cyan-300 font-mono border border-cyan-500/30">
+              {liveSessionCount}
+            </span>
+          </button>
+          <button
+            type="button"
+            onClick={() => setSessionSubTab('cumulative')}
+            className={`py-1.5 px-3 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 whitespace-nowrap ${
+              sessionSubTab === 'cumulative'
+                ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 shadow-sm'
+                : 'text-slate-400 hover:text-slate-200'
+            }`}
+          >
+            <TrendingUp className="w-3.5 h-3.5 text-cyan-400 shrink-0" />
+            <span>Cumulative Total</span>
+            <span className="px-1.5 py-0.2 text-[10px] bg-slate-900 rounded-full text-cyan-300 font-mono border border-cyan-500/30">
+              {cumulativeSessionCount}
+            </span>
             </button>
-            <button
-              type="button"
-              onClick={() => setSessionSubTab('cumulative')}
-              className={`py-1.5 px-3 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 whitespace-nowrap ${
-                sessionSubTab === 'cumulative'
-                  ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 shadow-sm'
-                  : 'text-slate-400 hover:text-slate-200'
-              }`}
-            >
-              <TrendingUp className="w-3.5 h-3.5" />
-              Cumulative
-              <span className="ml-0.5 px-1.5 py-0.5 rounded-md bg-slate-900/80 text-[10px] font-mono">
-                {Math.max(cumulativeSessionCount, liveSessionCount)}
-              </span>
-            </button>
-            {sessionSubTab === 'cumulative' && onClearCumulativeSessions && (
-              <button
-                type="button"
-                onClick={onClearCumulativeSessions}
-                className="ml-1 p-1.5 rounded-lg text-slate-500 hover:text-rose-300 hover:bg-slate-900 transition-colors"
-                title="Clear cumulative session history"
-              >
-                <Trash2 className="w-3.5 h-3.5" />
-              </button>
-            )}
           </div>
 
-          <div className="flex items-center gap-2 w-full md:w-auto text-slate-400">
-            <Server className="w-4 h-4 text-cyan-400 shrink-0" />
-            <h3 className="text-xs font-semibold text-slate-200">
-              {sessionSubTab === 'live' ? 'Live remote sessions' : 'Seen this run (cumulative)'}
-            </h3>
-          </div>
-        </div>
-
-        <div className="flex flex-col sm:flex-row items-center gap-3 w-full">
+        <div className="flex flex-col sm:flex-row items-center gap-3 w-full lg:w-auto">
           <div className="relative w-full sm:w-56">
             <Search className="w-3.5 h-3.5 absolute left-3 top-2.5 text-slate-500" />
             <input
@@ -218,9 +191,9 @@ export function HubTabControls({
             </button>
             <button
               type="button"
-              onClick={() => setFilterType('suspicious')}
+              onClick={() => setFilterType('spike')}
               className={`px-2.5 py-1 rounded-lg transition-colors ${
-                filterType === 'suspicious'
+                filterType === 'spike'
                   ? 'bg-rose-500/20 text-rose-400 font-semibold'
                   : 'text-slate-400 hover:text-slate-200'
               }`}
@@ -275,7 +248,7 @@ export function HubTabControls({
             <TrendingUp className="w-3.5 h-3.5 text-cyan-400 shrink-0" />
             <span>Cumulative Total</span>
             <span className="px-1.5 py-0.2 text-[10px] bg-slate-900 rounded-full text-cyan-300 font-mono border border-cyan-500/30">
-              {Math.max(cumulativeAppCount, liveAppCount)}
+              {cumulativeAppCount}
             </span>
           </button>
         </div>
@@ -315,17 +288,6 @@ export function HubTabControls({
               </option>
             </select>
           </div>
-          {appSubTab === 'cumulative' && onClearCumulativeProcesses && (
-            <button
-              type="button"
-              onClick={onClearCumulativeProcesses}
-              className="py-1.5 px-3 rounded-xl text-xs font-bold text-rose-400 hover:text-rose-200 bg-rose-950/80 hover:bg-rose-900 border border-rose-800/80 transition-all flex items-center gap-1.5 shrink-0 shadow-sm"
-              title="Clear accumulated process history"
-            >
-              <Trash2 className="w-3.5 h-3.5 text-rose-400" />
-              <span>Clear History</span>
-            </button>
-          )}
         </div>
       </div>
     );
@@ -362,7 +324,7 @@ export function HubTabControls({
             <TrendingUp className="w-3.5 h-3.5 text-cyan-400 shrink-0" />
             <span>Cumulative Total</span>
             <span className="px-1.5 py-0.2 text-[10px] bg-slate-900 rounded-full text-cyan-300 font-mono border border-cyan-500/30">
-              {cumulativeGeoCount > 0 ? cumulativeGeoCount : liveGeoCount}
+              {cumulativeGeoCount}
             </span>
           </button>
         </div>
@@ -405,17 +367,6 @@ export function HubTabControls({
               </option>
             </select>
           </div>
-          {geoSubTab === 'cumulative' && onClearCumulativeGeoNodes && (
-            <button
-              type="button"
-              onClick={onClearCumulativeGeoNodes}
-              className="py-1.5 px-3 rounded-xl text-xs font-bold text-rose-400 hover:text-rose-200 bg-rose-950/80 hover:bg-rose-900 border border-rose-800/80 transition-all flex items-center gap-1.5 shrink-0 shadow-sm"
-              title="Clear accumulated geo node history"
-            >
-              <Trash2 className="w-3.5 h-3.5 text-rose-400" />
-              <span>Clear History</span>
-            </button>
-          )}
         </div>
       </div>
     );

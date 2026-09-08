@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { X, Sliders, Bell, Cpu, Globe, RefreshCw, HardDrive, ChevronDown, RotateCcw, History } from 'lucide-react';
+import { X, Sliders, Bell, Cpu, Globe, RefreshCw, HardDrive, ChevronDown, RotateCcw, History, Trash2 } from 'lucide-react';
 import { MonitoringConfig } from '../types/network';
 import { getElectronIpc, isElectronShell } from '../utils/electronIpc';
 import { askConfirm } from '../ui/confirmBus';
@@ -10,6 +10,7 @@ interface SettingsModalProps {
   config: MonitoringConfig;
   onSaveConfig: (newConfig: MonitoringConfig) => void;
   onResetToDefaults: () => void | Promise<void>;
+  onClearCumulativeHistory?: () => void | Promise<void>;
 }
 
 export const SettingsModal: React.FC<SettingsModalProps> = ({
@@ -18,8 +19,10 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   config,
   onSaveConfig,
   onResetToDefaults,
+  onClearCumulativeHistory,
 }) => {
   const [isResetting, setIsResetting] = useState(false);
+  const [isClearingHistory, setIsClearingHistory] = useState(false);
   const [spikeThreshold, setSpikeThreshold] = useState(config.spikeThresholdPacketsPerSec);
   const [historySpikeThreshold, setHistorySpikeThreshold] = useState(
     config.historySpikePacketsPerSec ?? 200
@@ -361,6 +364,47 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
               className="w-4 h-4 accent-cyan-400 rounded cursor-pointer"
             />
           </div>
+
+          {onClearCumulativeHistory && (
+            <div className="flex items-center justify-between gap-3 p-3 rounded-xl bg-slate-900/60 border border-slate-800">
+              <div className="min-w-0">
+                <p className="font-semibold text-slate-200 flex items-center gap-1.5">
+                  <Trash2 className="w-3.5 h-3.5 text-rose-400" />
+                  Clear cumulative history
+                </p>
+                <p className="text-[11px] text-slate-500 mt-0.5">
+                  Wipe Sessions / Apps / Geo cumulative totals for this run. Live views stay.
+                </p>
+              </div>
+              <button
+                type="button"
+                disabled={isClearingHistory}
+                onClick={async () => {
+                  const ok = await askConfirm({
+                    title: 'Clear all cumulative history?',
+                    message:
+                      '• Session Cumulative Total\n' +
+                      '• App Cumulative Total\n' +
+                      '• Geo Cumulative Total\n\n' +
+                      'Live Real-time views are not reset.',
+                    confirmLabel: 'Clear History',
+                    cancelLabel: 'Cancel',
+                    tone: 'danger',
+                  });
+                  if (!ok) return;
+                  setIsClearingHistory(true);
+                  try {
+                    await onClearCumulativeHistory();
+                  } finally {
+                    setIsClearingHistory(false);
+                  }
+                }}
+                className="shrink-0 px-3 py-2 rounded-xl text-xs font-semibold text-rose-200 hover:text-rose-100 bg-rose-950/50 hover:bg-rose-900/60 border border-rose-800/70 disabled:opacity-50 cursor-pointer"
+              >
+                {isClearingHistory ? 'Clearing…' : 'Clear'}
+              </button>
+            </div>
+          )}
 
           </div>
 

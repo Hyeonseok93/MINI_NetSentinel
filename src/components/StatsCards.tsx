@@ -34,7 +34,7 @@ export const StatsCards: React.FC<StatsCardsProps> = ({
         <div>
           <p className="text-xs font-medium text-slate-400">Total Packets Processed</p>
           <p className="text-2xl font-bold text-slate-100 mt-1 font-mono">{totalPackets.toLocaleString()}</p>
-          <p className="text-[11px] text-emerald-400 mt-1">Zero-copy aggregation</p>
+          <p className="text-[11px] text-emerald-400 mt-1">Live traffic sample</p>
         </div>
         <div className="p-3 rounded-xl bg-emerald-950/60 border border-emerald-800/50 text-emerald-400">
           <Activity className="w-6 h-6" />

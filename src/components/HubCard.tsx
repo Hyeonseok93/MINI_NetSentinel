@@ -32,9 +32,6 @@ interface HubCardProps {
   onToggleBaseline: (ip: string) => void;
   onVerifyNormal: (ip: string) => void;
   onToggleBlock: (ip: string) => void;
-  onClearCumulativeProcesses?: () => void;
-  onClearCumulativeGeoNodes?: () => void;
-  onClearCumulativeSessions?: () => void;
   getCumulativeGeoSessions?: (country: string) => IpSession[];
 }
 
@@ -51,9 +48,6 @@ export const HubCard: React.FC<HubCardProps> = ({
   onToggleBaseline,
   onVerifyNormal,
   onToggleBlock,
-  onClearCumulativeProcesses,
-  onClearCumulativeGeoNodes,
-  onClearCumulativeSessions,
   getCumulativeGeoSessions,
 }) => {
   const [activeTab, setActiveTab] = useState<MainTabKey>('sessions');
@@ -68,12 +62,7 @@ export const HubCard: React.FC<HubCardProps> = ({
   const [geoSearchTerm, setGeoSearchTerm] = useState('');
   const [geoSortOption, setGeoSortOption] = useState<GeoSortOptionKey>('ips-desc');
 
-  const targetSessions =
-    sessionSubTab === 'cumulative'
-      ? cumulativeSessions.length > 0
-        ? cumulativeSessions
-        : sessions
-      : sessions;
+  const targetSessions = sessionSubTab === 'cumulative' ? cumulativeSessions : sessions;
 
   const filteredSessions = React.useMemo(
     () => filterAndSortSessions(targetSessions, searchTerm, filterType, sortOption),
@@ -82,24 +71,11 @@ export const HubCard: React.FC<HubCardProps> = ({
 
   const liveAppNames = new Set(processes.map((p) => p.processName));
   const cumulativeAppNames = new Set(cumulativeProcesses.map((p) => p.processName));
-  const targetProcesses =
-    appSubTab === 'cumulative'
-      ? cumulativeProcesses.length > 0
-        ? cumulativeProcesses
-        : processes
-      : processes;
+  const targetProcesses = appSubTab === 'cumulative' ? cumulativeProcesses : processes;
   const groupedProcesses = groupAndSortProcesses(targetProcesses, appSearchTerm, appSortOption);
-  const maxAppBytes = Math.max(
-    ...groupedProcesses.map((g) => (appSubTab === 'live' ? Math.floor(g.totalBytes / 10) : g.totalBytes)),
-    1
-  );
+  const maxAppBytes = Math.max(...groupedProcesses.map((g) => g.totalBytes), 1);
 
-  const targetGeoNodes =
-    geoSubTab === 'cumulative'
-      ? cumulativeGeoNodes.length > 0
-        ? cumulativeGeoNodes
-        : geoNodes
-      : geoNodes;
+  const targetGeoNodes = geoSubTab === 'cumulative' ? cumulativeGeoNodes : geoNodes;
   const filteredGeoNodes = filterAndSortGeoNodes(targetGeoNodes, geoSearchTerm, geoSortOption);
 
   const quotaPercent = Math.min(Math.round((currentBytesToday / dailyQuotaBytes) * 100), 100);
@@ -112,11 +88,7 @@ export const HubCard: React.FC<HubCardProps> = ({
         <HubTabBar
           activeTab={activeTab}
           setActiveTab={setActiveTab}
-          sessionCount={
-            sessionSubTab === 'cumulative'
-              ? Math.max(cumulativeSessions.length, sessions.length)
-              : sessions.length
-          }
+          sessionCount={sessionSubTab === 'cumulative' ? cumulativeSessions.length : sessions.length}
           appCount={groupedProcesses.length}
           geoCount={filteredGeoNodes.length}
           quotaPercent={quotaPercent}
@@ -133,7 +105,6 @@ export const HubCard: React.FC<HubCardProps> = ({
           setSessionSubTab={setSessionSubTab}
           liveSessionCount={sessions.length}
           cumulativeSessionCount={cumulativeSessions.length}
-          onClearCumulativeSessions={onClearCumulativeSessions}
           appSubTab={appSubTab}
           setAppSubTab={setAppSubTab}
           appSearchTerm={appSearchTerm}
@@ -142,7 +113,6 @@ export const HubCard: React.FC<HubCardProps> = ({
           setAppSortOption={setAppSortOption}
           liveAppCount={liveAppNames.size}
           cumulativeAppCount={cumulativeAppNames.size}
-          onClearCumulativeProcesses={onClearCumulativeProcesses}
           geoSubTab={geoSubTab}
           setGeoSubTab={setGeoSubTab}
           geoSearchTerm={geoSearchTerm}
@@ -152,7 +122,6 @@ export const HubCard: React.FC<HubCardProps> = ({
           liveGeoCount={geoNodes.length}
           cumulativeGeoCount={cumulativeGeoNodes.length}
           myPublicGeo={myPublicGeo}
-          onClearCumulativeGeoNodes={onClearCumulativeGeoNodes}
         />
       </div>
 

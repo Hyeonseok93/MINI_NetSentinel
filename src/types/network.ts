@@ -11,7 +11,7 @@ export interface IpSession {
   bytesOut: number;
   totalBytes: number;
   lastSeen: string;
-  status: 'normal' | 'new' | 'suspicious' | 'blocked';
+  status: 'normal' | 'new' | 'spike' | 'blocked';
   /** Primary label; `TCP+UDP` when both were seen for this IP this tick. */
   protocol: 'TCP' | 'UDP' | 'TCP+UDP';
   port: number;

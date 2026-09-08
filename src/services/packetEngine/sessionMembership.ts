@@ -7,7 +7,7 @@ export type MembershipSets = {
 };
 
 export type MembershipHints = {
-  /** Traffic spike this tick (pkts/s over threshold) — UI "suspicious" means spike, not malware. */
+  /** Traffic spike this tick (pkts/s over threshold) — not a malware verdict. */
   isTrafficSpike?: boolean;
 };
 
@@ -31,7 +31,7 @@ export function resolveSessionMembership(
     return { status: 'normal', isBaseline };
   }
   if (hints.isTrafficSpike) {
-    return { status: 'suspicious', isBaseline: false };
+    return { status: 'spike', isBaseline: false };
   }
   return { status: 'new', isBaseline: false };
 }

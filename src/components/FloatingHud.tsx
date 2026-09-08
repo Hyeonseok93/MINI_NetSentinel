@@ -218,7 +218,7 @@ export const FloatingHud: React.FC<FloatingHudProps> = ({
           <div className="rounded-xl bg-slate-900/80 border border-slate-800 px-2.5 py-2 flex flex-col justify-center min-h-0">
             <div className="flex items-center gap-1 text-[9px] text-rose-400 font-mono mb-0.5">
               <ShieldAlert className="w-3 h-3" />
-              Alerts
+              Events
             </div>
             <p
               className={`text-sm font-bold font-mono tabular-nums ${

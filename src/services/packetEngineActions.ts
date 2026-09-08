@@ -7,9 +7,7 @@ export function createPacketEngineActions() {
     toggleBaseline: (ip: string) => packetEngine.toggleBaseline(ip),
     verifyAsNormal: (ip: string) => packetEngine.verifyAsNormal(ip),
     toggleBlockIp: (ip: string) => packetEngine.toggleBlockIp(ip),
-    clearCumulativeProcesses: () => packetEngine.clearCumulativeProcesses(),
-    clearCumulativeGeoNodes: () => packetEngine.clearCumulativeGeoNodes(),
-    clearCumulativeSessions: () => packetEngine.clearCumulativeSessions(),
+    clearAllCumulativeHistory: () => packetEngine.clearAllCumulativeHistory(),
     getCumulativeGeoSessions: (country: string): IpSession[] =>
       packetEngine.getCumulativeGeoSessions(country),
     resolveAnomaly: (id: string) => packetEngine.resolveAnomaly(id),

@@ -589,11 +589,6 @@ export class RealPacketEngine {
     return Array.from(this.processes.cumulativeProcessMap.values()).sort((a, b) => b.bytesTotal - a.bytesTotal);
   }
 
-  public clearCumulativeProcesses() {
-    this.processes.clearCumulative();
-    this.notify();
-  }
-
   public getGroupedCumulativeProcesses(): import('../types/network').GroupedProcess[] {
     return sortGroupedProcessesByBytesDesc(
       groupProcessesByName(Array.from(this.processes.cumulativeProcessMap.values()))
@@ -604,8 +599,11 @@ export class RealPacketEngine {
     return this.sessionHistory.list();
   }
 
-  public clearCumulativeSessions() {
+  /** Clear all Hub cumulative totals (sessions + apps + geo) for this run. */
+  public clearAllCumulativeHistory() {
     this.sessionHistory.clear();
+    this.processes.clearCumulative();
+    this.geo.clearCumulative();
     this.notify();
   }
 
@@ -619,11 +617,6 @@ export class RealPacketEngine {
 
   public getCumulativeGeoSessions(country: string): IpSession[] {
     return this.geo.getCumulativeGeoSessions(country);
-  }
-
-  public clearCumulativeGeoNodes() {
-    this.geo.clearCumulative();
-    this.notify();
   }
 
   public subscribe(fn: () => void) {

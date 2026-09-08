@@ -24,4 +24,4 @@ export type GeoSortOptionKey =
   | 'bytes-asc'
   | 'country-asc';
 
-export type SessionFilterType = 'all' | 'new' | 'normal' | 'suspicious' | 'baseline';
+export type SessionFilterType = 'all' | 'new' | 'normal' | 'spike' | 'baseline';

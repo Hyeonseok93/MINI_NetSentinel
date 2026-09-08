@@ -46,6 +46,7 @@ export function AppModals({
           await onResetToDefaults();
           await actions.resetAllMonitoringState();
         }}
+        onClearCumulativeHistory={() => actions.clearAllCumulativeHistory()}
       />
 
       <TrustedManagerModal

@@ -35,8 +35,6 @@ export type IngestTickResult = {
   ipTickStats: SpikeHistoryEntry['topIps'];
 };
 
-export { reconcileActiveSessions } from './sessionReconcile';
-
 /** Apply one native session into maps + anomaly/toast side effects. */
 export function ingestNativeSession(native: NativeIpSession, ctx: IngestTickContext): {
   pIn: number;

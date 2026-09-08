@@ -25,7 +25,7 @@ function loadMembershipModule() {
           ['9.9.9.9', {}, { status: 'blocked', isBaseline: false }],
           ['8.8.8.8', {}, { status: 'normal', isBaseline: true }],
           ['1.1.1.1', {}, { status: 'normal', isBaseline: false }],
-          ['2.2.2.2', { isTrafficSpike: true }, { status: 'suspicious', isBaseline: false }],
+          ['2.2.2.2', { isTrafficSpike: true }, { status: 'spike', isBaseline: false }],
           ['2.2.2.2', {}, { status: 'new', isBaseline: false }],
         ];
         for (const [ip, hints, expected] of cases) {

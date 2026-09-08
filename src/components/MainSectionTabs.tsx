@@ -113,9 +113,6 @@ export function MainSectionTabs({
           onToggleBaseline={actions.toggleBaseline}
           onVerifyNormal={actions.verifyAsNormal}
           onToggleBlock={actions.toggleBlockIp}
-          onClearCumulativeProcesses={actions.clearCumulativeProcesses}
-          onClearCumulativeGeoNodes={actions.clearCumulativeGeoNodes}
-          onClearCumulativeSessions={actions.clearCumulativeSessions}
           getCumulativeGeoSessions={actions.getCumulativeGeoSessions}
         />
       ) : mainSection === 'anomalies' ? (
