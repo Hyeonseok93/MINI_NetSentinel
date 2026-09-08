@@ -21,6 +21,7 @@ import {
 
 interface HubCardProps {
   sessions: IpSession[];
+  cumulativeSessions?: IpSession[];
   processes: ProcessTrafficPoint[];
   cumulativeProcesses?: ProcessTrafficPoint[];
   geoNodes: GeoNode[];
@@ -33,11 +34,13 @@ interface HubCardProps {
   onToggleBlock: (ip: string) => void;
   onClearCumulativeProcesses?: () => void;
   onClearCumulativeGeoNodes?: () => void;
+  onClearCumulativeSessions?: () => void;
   getCumulativeGeoSessions?: (country: string) => IpSession[];
 }
 
 export const HubCard: React.FC<HubCardProps> = ({
   sessions,
+  cumulativeSessions = [],
   processes,
   cumulativeProcesses = [],
   geoNodes,
@@ -50,12 +53,14 @@ export const HubCard: React.FC<HubCardProps> = ({
   onToggleBlock,
   onClearCumulativeProcesses,
   onClearCumulativeGeoNodes,
+  onClearCumulativeSessions,
   getCumulativeGeoSessions,
 }) => {
   const [activeTab, setActiveTab] = useState<MainTabKey>('sessions');
   const [searchTerm, setSearchTerm] = useState('');
   const [filterType, setFilterType] = useState<SessionFilterType>('all');
   const [sortOption, setSortOption] = useState<SortOptionKey>('packets-desc');
+  const [sessionSubTab, setSessionSubTab] = useState<'live' | 'cumulative'>('live');
   const [appSubTab, setAppSubTab] = useState<'live' | 'cumulative'>('cumulative');
   const [appSearchTerm, setAppSearchTerm] = useState('');
   const [appSortOption, setAppSortOption] = useState<AppSortOptionKey>('bytes-desc');
@@ -63,9 +68,16 @@ export const HubCard: React.FC<HubCardProps> = ({
   const [geoSearchTerm, setGeoSearchTerm] = useState('');
   const [geoSortOption, setGeoSortOption] = useState<GeoSortOptionKey>('ips-desc');
 
+  const targetSessions =
+    sessionSubTab === 'cumulative'
+      ? cumulativeSessions.length > 0
+        ? cumulativeSessions
+        : sessions
+      : sessions;
+
   const filteredSessions = React.useMemo(
-    () => filterAndSortSessions(sessions, searchTerm, filterType, sortOption),
-    [sessions, searchTerm, filterType, sortOption]
+    () => filterAndSortSessions(targetSessions, searchTerm, filterType, sortOption),
+    [targetSessions, searchTerm, filterType, sortOption]
   );
 
   const liveAppNames = new Set(processes.map((p) => p.processName));
@@ -100,7 +112,11 @@ export const HubCard: React.FC<HubCardProps> = ({
         <HubTabBar
           activeTab={activeTab}
           setActiveTab={setActiveTab}
-          sessionCount={filteredSessions.length}
+          sessionCount={
+            sessionSubTab === 'cumulative'
+              ? Math.max(cumulativeSessions.length, sessions.length)
+              : sessions.length
+          }
           appCount={groupedProcesses.length}
           geoCount={filteredGeoNodes.length}
           quotaPercent={quotaPercent}
@@ -113,6 +129,11 @@ export const HubCard: React.FC<HubCardProps> = ({
           setFilterType={setFilterType}
           sortOption={sortOption}
           setSortOption={setSortOption}
+          sessionSubTab={sessionSubTab}
+          setSessionSubTab={setSessionSubTab}
+          liveSessionCount={sessions.length}
+          cumulativeSessionCount={cumulativeSessions.length}
+          onClearCumulativeSessions={onClearCumulativeSessions}
           appSubTab={appSubTab}
           setAppSubTab={setAppSubTab}
           appSearchTerm={appSearchTerm}

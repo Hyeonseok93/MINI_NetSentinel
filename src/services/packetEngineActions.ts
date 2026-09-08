@@ -9,6 +9,7 @@ export function createPacketEngineActions() {
     toggleBlockIp: (ip: string) => packetEngine.toggleBlockIp(ip),
     clearCumulativeProcesses: () => packetEngine.clearCumulativeProcesses(),
     clearCumulativeGeoNodes: () => packetEngine.clearCumulativeGeoNodes(),
+    clearCumulativeSessions: () => packetEngine.clearCumulativeSessions(),
     getCumulativeGeoSessions: (country: string): IpSession[] =>
       packetEngine.getCumulativeGeoSessions(country),
     resolveAnomaly: (id: string) => packetEngine.resolveAnomaly(id),

@@ -115,6 +115,7 @@ export function App() {
             mainSection={mainSection}
             onSectionChange={setMainSection}
             sessions={snap.sessions}
+            cumulativeSessions={snap.cumulativeSessions}
             anomalies={snap.anomalies}
             spikeHistory={snap.spikeHistory}
             processBreakdown={snap.processBreakdown}
@@ -131,7 +132,7 @@ export function App() {
       </main>
 
       <footer className="shrink-0 py-2 border-t border-slate-900/80 text-center text-[10px] text-slate-600 bg-slate-950">
-        <p>NetSentinel &copy; 2026 — Packet & Anomaly Sentinel</p>
+        <p>NetSentinel &copy; 2026 — personal network monitor</p>
       </footer>
 
       <AppModals

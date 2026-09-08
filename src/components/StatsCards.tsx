@@ -56,10 +56,10 @@ export const StatsCards: React.FC<StatsCardsProps> = ({
       {/* Anomalies Detected */}
       <div className="glass-panel p-4 rounded-2xl flex items-center justify-between border border-slate-800/80 hover:border-rose-500/30 transition-all duration-300">
         <div>
-          <p className="text-xs font-medium text-slate-400">Anomalies & Alerts</p>
+          <p className="text-xs font-medium text-slate-400">Open events</p>
           <p className="text-2xl font-bold text-rose-400 mt-1 font-mono">{anomaliesCount}</p>
           <p className="text-[11px] text-rose-400 mt-1">
-            {anomaliesCount > 0 ? 'Requires attention' : 'Baseline normal'}
+            {anomaliesCount > 0 ? 'Unresolved log entries' : 'None open'}
           </p>
         </div>
         <div className={`p-3 rounded-xl border ${anomaliesCount > 0 ? 'bg-rose-950/60 border-rose-800/60 text-rose-400 glow-rose' : 'bg-slate-900 border-slate-800 text-slate-500'}`}>

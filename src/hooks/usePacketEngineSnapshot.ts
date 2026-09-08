@@ -28,6 +28,7 @@ export type EngineSnapshot = {
   groupedCumulativeProcesses: GroupedProcess[];
   geoNodes: GeoNode[];
   cumulativeGeoNodes: GeoNode[];
+  cumulativeSessions: IpSession[];
   myPublicGeo: ReturnType<typeof packetEngine.getMyPublicGeo>;
 };
 
@@ -46,6 +47,7 @@ function readSnapshot(): EngineSnapshot {
     groupedCumulativeProcesses: packetEngine.getGroupedCumulativeProcesses(),
     geoNodes: packetEngine.getGeoNodes(),
     cumulativeGeoNodes: packetEngine.getCumulativeGeoNodes(),
+    cumulativeSessions: packetEngine.getCumulativeSessions(),
     myPublicGeo: packetEngine.getMyPublicGeo(),
   };
 }

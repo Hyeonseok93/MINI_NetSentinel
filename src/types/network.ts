@@ -12,7 +12,8 @@ export interface IpSession {
   totalBytes: number;
   lastSeen: string;
   status: 'normal' | 'new' | 'suspicious' | 'blocked';
-  protocol: 'TCP' | 'UDP' | 'ICMP' | 'HTTPS' | 'DNS';
+  /** Primary label; `TCP+UDP` when both were seen for this IP this tick. */
+  protocol: 'TCP' | 'UDP' | 'TCP+UDP';
   port: number;
   isBaseline: boolean;
 }

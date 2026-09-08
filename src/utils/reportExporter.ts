@@ -12,14 +12,14 @@ export const exportAuditReportCsv = (
   let csvContent = '\uFEFF'; // Add UTF-8 BOM for Excel compatibility
 
   // SECTION 1: REPORT HEADER
-  csvContent += `=== MINI NetSentinel Security Audit Report ===\r\n`;
+  csvContent += `=== NetSentinel Session Snapshot ===\r\n`;
   csvContent += `Generated At,${nowStr}\r\n`;
-  csvContent += `Total Active IP Sessions,${sessions.length}\r\n`;
-  csvContent += `Total Monitored Apps,${processes.length}\r\n`;
-  csvContent += `Total Geo Destinations,${geoNodes.length}\r\n\r\n`;
+  csvContent += `Live remote IP sessions,${sessions.length}\r\n`;
+  csvContent += `Monitored apps,${processes.length}\r\n`;
+  csvContent += `Geo destinations,${geoNodes.length}\r\n\r\n`;
 
   // SECTION 2: ACTIVE IP SESSIONS TABLE
-  csvContent += `=== Active & Historical IP Sessions ===\r\n`;
+  csvContent += `=== Live remote IP sessions ===\r\n`;
   csvContent += `IP Address,Domain,Location,Country Code,Protocol,Port,Packets In,Packets Out,Total Bytes,Formatted Volume,Status,Is Baseline\r\n`;
   sessions.forEach((s) => {
     const domain = s.domain ? `"${s.domain.replace(/"/g, '""')}"` : 'Unresolved';
@@ -29,7 +29,7 @@ export const exportAuditReportCsv = (
   csvContent += `\r\n`;
 
   // SECTION 3: PROCESS APP BREAKDOWN TABLE
-  csvContent += `=== Process Bandwidth Consumption Breakdown ===\r\n`;
+  csvContent += `=== Process bandwidth breakdown ===\r\n`;
   csvContent += `Process Name,PID Count,Packets In,Packets Out,Total Bytes,Formatted Volume\r\n`;
   processes.forEach((p) => {
     const procName = `"${p.processName.replace(/"/g, '""')}"`;
@@ -37,8 +37,8 @@ export const exportAuditReportCsv = (
   });
   csvContent += `\r\n`;
 
-  // SECTION 4: GEO THREAT DESTINATIONS TABLE
-  csvContent += `=== Geo Country Distribution ===\r\n`;
+  // SECTION 4: GEO DESTINATIONS
+  csvContent += `=== Geo country distribution ===\r\n`;
   csvContent += `Country,Country Code,Active IP Count,Total Bytes,Formatted Volume\r\n`;
   geoNodes.forEach((g) => {
     const countryName = `"${g.country.replace(/"/g, '""')}"`;
@@ -50,7 +50,7 @@ export const exportAuditReportCsv = (
   const url = URL.createObjectURL(blob);
   const link = document.createElement('a');
   link.setAttribute('href', url);
-  link.setAttribute('download', `NetSentinel_Audit_Report_${dateFilename}.csv`);
+  link.setAttribute('download', `NetSentinel_Session_Snapshot_${dateFilename}.csv`);
   document.body.appendChild(link);
   link.click();
   document.body.removeChild(link);

@@ -174,7 +174,7 @@ export const Navbar: React.FC<NavbarProps> = ({
             <button
               onClick={onExportReport}
               className="p-1.5 rounded-md bg-slate-900/90 text-slate-300 border border-slate-800 hover:text-cyan-400 hover:border-cyan-500/40 transition-colors"
-              title="Download CSV Audit Report"
+              title="Download session snapshot CSV"
             >
               <Download className="w-3.5 h-3.5 text-cyan-400" />
             </button>

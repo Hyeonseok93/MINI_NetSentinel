@@ -36,7 +36,7 @@ export const BlacklistManagerModal: React.FC<BlacklistManagerModalProps> = ({
       return;
     }
     setIpError(null);
-    onAddBlockIp(safeIp, manualReason.trim().slice(0, 120) || 'Manual Security Block');
+    onAddBlockIp(safeIp, manualReason.trim().slice(0, 120) || 'Manual block');
     setManualIp('');
     setManualReason('');
   };

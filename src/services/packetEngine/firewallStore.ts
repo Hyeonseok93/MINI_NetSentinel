@@ -29,7 +29,7 @@ export class FirewallStore {
     this.blockedIps.forEach((ip) => {
       list.push({
         ip,
-        reason: this.blockedIpReasons.get(ip) || 'Blocked by Firewall Policy',
+        reason: this.blockedIpReasons.get(ip) || 'Manual block',
         blockedAt: this.blockedIpAt.get(ip) || Date.now(),
       });
     });
@@ -52,7 +52,7 @@ export class FirewallStore {
       deps.notify();
       return { ok: false, error: `Invalid IPv4 address: ${ip}` };
     }
-    const safeReason = String(reason || 'Manual Security Block').slice(0, 120);
+    const safeReason = String(reason || 'Manual block').slice(0, 120);
 
     const applyLocalBlock = () => {
       this.blockedIps.add(safeIp);

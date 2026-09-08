@@ -35,7 +35,7 @@ export const AnomalyLog: React.FC<AnomalyLogProps> = ({
       >
         <div className="flex items-center gap-2">
           <ShieldAlert className="w-4 h-4 text-rose-400" />
-          <h2 className="text-sm font-semibold text-slate-200">Anomaly & Event Audit Feed</h2>
+          <h2 className="text-sm font-semibold text-slate-200">Event log</h2>
           {unresolvedCount > 0 && (
             <span
               className="min-w-[1.25rem] h-5 px-1.5 inline-flex items-center justify-center text-[10px] font-bold bg-rose-500 text-white rounded-full"
@@ -68,7 +68,7 @@ export const AnomalyLog: React.FC<AnomalyLogProps> = ({
       >
         {anomalies.length === 0 ? (
           <div className="py-12 text-center text-xs text-slate-500">
-            No anomaly events detected. Baseline status is normal.
+            No events yet. Spikes appear when an IP exceeds the packet-rate threshold; new-IP notices need Settings enabled.
           </div>
         ) : (
           anomalies.map((event) => (

@@ -22,6 +22,11 @@ type Props = {
   setFilterType: (v: SessionFilterType) => void;
   sortOption: SortOptionKey;
   setSortOption: (v: SortOptionKey) => void;
+  sessionSubTab: 'live' | 'cumulative';
+  setSessionSubTab: (v: 'live' | 'cumulative') => void;
+  liveSessionCount: number;
+  cumulativeSessionCount: number;
+  onClearCumulativeSessions?: () => void;
   appSubTab: 'live' | 'cumulative';
   setAppSubTab: (v: 'live' | 'cumulative') => void;
   appSearchTerm: string;
@@ -51,6 +56,11 @@ export function HubTabControls({
   setFilterType,
   sortOption,
   setSortOption,
+  sessionSubTab,
+  setSessionSubTab,
+  liveSessionCount,
+  cumulativeSessionCount,
+  onClearCumulativeSessions,
   appSubTab,
   setAppSubTab,
   appSearchTerm,
@@ -73,13 +83,60 @@ export function HubTabControls({
 }: Props) {
   if (activeTab === 'sessions') {
     return (
-      <div className="pt-2 flex flex-col md:flex-row items-center justify-between gap-3 w-full">
-        <div className="flex items-center gap-2 w-full md:w-auto">
-          <Server className="w-4 h-4 text-cyan-400" />
-          <h3 className="text-xs font-semibold text-slate-200">Active Network Sessions</h3>
+      <div className="pt-2 flex flex-col gap-3 w-full">
+        <div className="flex flex-col md:flex-row items-center justify-between gap-3 w-full">
+          <div className="flex items-center gap-1.5 bg-slate-950 p-1 rounded-xl border border-slate-800 shrink-0">
+            <button
+              type="button"
+              onClick={() => setSessionSubTab('live')}
+              className={`py-1.5 px-3 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 whitespace-nowrap ${
+                sessionSubTab === 'live'
+                  ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 shadow-sm'
+                  : 'text-slate-400 hover:text-slate-200'
+              }`}
+            >
+              <Zap className="w-3.5 h-3.5" />
+              Live
+              <span className="ml-0.5 px-1.5 py-0.5 rounded-md bg-slate-900/80 text-[10px] font-mono">
+                {liveSessionCount}
+              </span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setSessionSubTab('cumulative')}
+              className={`py-1.5 px-3 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 whitespace-nowrap ${
+                sessionSubTab === 'cumulative'
+                  ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 shadow-sm'
+                  : 'text-slate-400 hover:text-slate-200'
+              }`}
+            >
+              <TrendingUp className="w-3.5 h-3.5" />
+              Cumulative
+              <span className="ml-0.5 px-1.5 py-0.5 rounded-md bg-slate-900/80 text-[10px] font-mono">
+                {Math.max(cumulativeSessionCount, liveSessionCount)}
+              </span>
+            </button>
+            {sessionSubTab === 'cumulative' && onClearCumulativeSessions && (
+              <button
+                type="button"
+                onClick={onClearCumulativeSessions}
+                className="ml-1 p-1.5 rounded-lg text-slate-500 hover:text-rose-300 hover:bg-slate-900 transition-colors"
+                title="Clear cumulative session history"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+              </button>
+            )}
+          </div>
+
+          <div className="flex items-center gap-2 w-full md:w-auto text-slate-400">
+            <Server className="w-4 h-4 text-cyan-400 shrink-0" />
+            <h3 className="text-xs font-semibold text-slate-200">
+              {sessionSubTab === 'live' ? 'Live remote sessions' : 'Seen this run (cumulative)'}
+            </h3>
+          </div>
         </div>
 
-        <div className="flex flex-col sm:flex-row items-center gap-3 w-full md:w-auto">
+        <div className="flex flex-col sm:flex-row items-center gap-3 w-full">
           <div className="relative w-full sm:w-56">
             <Search className="w-3.5 h-3.5 absolute left-3 top-2.5 text-slate-500" />
             <input

@@ -13,6 +13,7 @@ import { AnomalyStore } from './packetEngine/anomalyStore';
 import { GeoStore } from './packetEngine/geoStore';
 import { FirewallStore, type FirewallDeps } from './packetEngine/firewallStore';
 import { ProcessAccumulator } from './packetEngine/processAccumulator';
+import { SessionHistoryStore } from './packetEngine/sessionHistoryStore';
 import { TrustStore, type TrustStoreDeps } from './packetEngine/trustStore';
 import { SpikeHistoryStore } from './packetEngine/spikeHistoryStore';
 import {
@@ -41,6 +42,7 @@ export class RealPacketEngine {
   private geo = new GeoStore();
   private firewall = new FirewallStore();
   private processes = new ProcessAccumulator();
+  private sessionHistory = new SessionHistoryStore();
   private fetchInFlight = false;
   private listeners: (() => void)[] = [];
   private membershipHydrated = false;
@@ -279,6 +281,7 @@ export class RealPacketEngine {
   private async fetchLiveNativePacketsInner() {
     let rawNativeList: NativeIpSession[] = [];
     let gotPayload = false;
+    let reconcileActive = false;
 
     // 1) Electron packaged / desktop bridge
     const ipc = this.ipc();
@@ -287,6 +290,7 @@ export class RealPacketEngine {
         const data = await ipc.invoke('get-live-netstat');
         if (data && typeof data === 'object') {
           gotPayload = true;
+          reconcileActive = data.ok !== false;
           if (Array.isArray(data.sessions)) rawNativeList = data.sessions;
           if (Array.isArray(data.processes)) this.processes.ingest(data.processes);
 
@@ -327,6 +331,7 @@ export class RealPacketEngine {
         if (response.ok) {
           const data = await response.json();
           gotPayload = true;
+          reconcileActive = data.ok !== false;
           if (Array.isArray(data.sessions)) rawNativeList = data.sessions;
           else if (Array.isArray(data)) rawNativeList = data;
           if (Array.isArray(data.processes)) this.processes.ingest(data.processes);
@@ -358,10 +363,13 @@ export class RealPacketEngine {
       }
     }
 
-    this.processRawNativeSessions(rawNativeList);
+    this.processRawNativeSessions(rawNativeList, { reconcileActive: gotPayload && reconcileActive });
   }
 
-  private processRawNativeSessions(rawNativeList: NativeIpSession[]) {
+  private processRawNativeSessions(
+    rawNativeList: NativeIpSession[],
+    opts: { reconcileActive: boolean }
+  ) {
     const timeStr = formatClock(new Date(), true);
     const { secPacketsIn, secPacketsOut, secBytes, secBytesIn, secBytesOut, ipTickStats } =
       ingestNativeSessionList(rawNativeList ?? [], {
@@ -372,7 +380,9 @@ export class RealPacketEngine {
         anomalies: this.anomalies,
         toast: this.toast,
         geo: this.geo,
+        sessionHistory: this.sessionHistory,
         sessions: this.sessions,
+        reconcileActive: opts.reconcileActive,
       });
 
     this.trafficHistory.push({
@@ -473,6 +483,7 @@ export class RealPacketEngine {
 
     this.processes.clearAll();
     this.geo.clearCumulative();
+    this.sessionHistory.clear();
     this.trafficHistory = [];
     this.initHistory();
 
@@ -587,6 +598,15 @@ export class RealPacketEngine {
     return sortGroupedProcessesByBytesDesc(
       groupProcessesByName(Array.from(this.processes.cumulativeProcessMap.values()))
     );
+  }
+
+  public getCumulativeSessions(): IpSession[] {
+    return this.sessionHistory.list();
+  }
+
+  public clearCumulativeSessions() {
+    this.sessionHistory.clear();
+    this.notify();
   }
 
   public getGeoNodes(): GeoNode[] {

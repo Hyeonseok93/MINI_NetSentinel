@@ -130,7 +130,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
           <div className="shrink-0 p-4 border-b border-slate-800 flex items-center justify-between bg-slate-900/95">
             <div className="flex items-center gap-2 min-w-0">
               <Sliders className="w-4 h-4 text-cyan-400 shrink-0" />
-              <h3 className="text-sm font-semibold text-slate-100 truncate">Sentinel Detector Settings</h3>
+              <h3 className="text-sm font-semibold text-slate-100 truncate">Monitoring Settings</h3>
             </div>
             <button
               type="button"
@@ -312,7 +312,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
               <span className="text-[11px] font-mono text-slate-400 whitespace-nowrap shrink-0">pkts/sec</span>
             </div>
             <p className="text-[11px] text-slate-500 mt-1">
-              Triggers Anomaly warning when a single IP exceeds this packet rate in 1 second.
+              Triggers an event when a single IP exceeds this packet rate in 1 second (spike ≠ malware).
             </p>
           </div>
 
@@ -348,9 +348,11 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
             <div>
               <p className="font-semibold text-slate-200 flex items-center gap-1.5">
                 <Bell className="w-3.5 h-3.5 text-cyan-400" />
-                In-App Toast Notification
+                New remote IP notices
               </p>
-              <p className="text-[11px] text-slate-500 mt-0.5">Alert on new unrecognized IP connections.</p>
+              <p className="text-[11px] text-slate-500 mt-0.5">
+                Toast + event log when a remote IP is first seen this run (off by default).
+              </p>
             </div>
             <input
               type="checkbox"
@@ -373,7 +375,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 message:
                   '• Settings → factory defaults (new-IP toasts OFF)\n' +
                   '• Verified / Trusted / Blocked → cleared (built-in trusted kept)\n' +
-                  '• Anomalies & traffic totals → cleared\n' +
+                  '• Events & traffic totals → cleared\n' +
                   '• IPs will be re-learned as NEW',
                 detail: 'Firewall block rules will be removed for app-blocked IPs.',
                 confirmLabel: 'Reset All',

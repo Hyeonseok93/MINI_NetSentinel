@@ -1,7 +1,7 @@
 const { describe, it } = require('node:test');
 const assert = require('node:assert/strict');
 const { createFrameHandler, DLT_EN10MB, IP_PROTO_UDP, IP_PROTO_TCP } = require('../lib/npcap-parse.cjs');
-const { parseForeignAddr } = require('../telemetry-core.cjs');
+const { parseForeignAddr, finalizeSessionProtocol } = require('../telemetry-core.cjs');
 
 function buildEthernetIpv4Udp({ srcIp, dstIp, sport, dport, payloadLen = 20 }) {
   const eth = Buffer.alloc(14 + 20 + 8 + payloadLen);
@@ -91,5 +91,14 @@ describe('parseForeignAddr', () => {
     assert.equal(parseForeignAddr('*:*'), null);
     assert.equal(parseForeignAddr('[::1]:53'), null);
     assert.equal(parseForeignAddr('127.0.0.1:53'), null);
+  });
+});
+
+describe('finalizeSessionProtocol', () => {
+  it('labels TCP+UDP when both were seen', () => {
+    assert.equal(finalizeSessionProtocol(true, true, 'TCP'), 'TCP+UDP');
+    assert.equal(finalizeSessionProtocol(true, false, 'UDP'), 'TCP');
+    assert.equal(finalizeSessionProtocol(false, true, 'TCP'), 'UDP');
+    assert.equal(finalizeSessionProtocol(false, false, 'UDP'), 'UDP');
   });
 });

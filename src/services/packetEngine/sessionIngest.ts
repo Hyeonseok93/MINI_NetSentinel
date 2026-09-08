@@ -1,9 +1,11 @@
 import type { AnomalyEvent, IpSession, SpikeHistoryEntry } from '../../types/network';
 import { extractNativeTraffic, normalizeProtocol, type NativeIpSession } from './nativeSession';
 import { resolveSessionMembership, type MembershipSets } from './sessionMembership';
+import { reconcileActiveSessions } from './sessionReconcile';
 import type { AnomalyStore } from './anomalyStore';
 import type { GeoStore } from './geoStore';
 import type { ToastGate } from './toastGate';
+import type { SessionHistoryStore } from './sessionHistoryStore';
 
 export type IngestMonitoringConfig = {
   spikeThresholdPacketsPerSec: number;
@@ -18,7 +20,10 @@ export type IngestTickContext = {
   anomalies: AnomalyStore;
   toast: ToastGate;
   geo: GeoStore;
+  sessionHistory: SessionHistoryStore;
   sessions: Map<string, IpSession>;
+  /** When true, drop map entries not present in this tick (successful poll only). */
+  reconcileActive: boolean;
 };
 
 export type IngestTickResult = {
@@ -29,6 +34,8 @@ export type IngestTickResult = {
   secBytesOut: number;
   ipTickStats: SpikeHistoryEntry['topIps'];
 };
+
+export { reconcileActiveSessions } from './sessionReconcile';
 
 /** Apply one native session into maps + anomaly/toast side effects. */
 export function ingestNativeSession(native: NativeIpSession, ctx: IngestTickContext): {
@@ -75,16 +82,17 @@ export function ingestNativeSession(native: NativeIpSession, ctx: IngestTickCont
       ip: native.ip,
       timestamp: ctx.timeStr,
       type: 'TRAFFIC_SPIKE',
-      severity: 'high',
-      message: `Traffic spike on ${native.ip}: ${packetsThisSec} pkts/s (threshold ${ctx.monitoringConfig.spikeThresholdPacketsPerSec})`,
+      severity: 'medium',
+      message: `Packet-rate spike on ${native.ip}: ${packetsThisSec} pkts/s (threshold ${ctx.monitoringConfig.spikeThresholdPacketsPerSec})`,
       resolved: false,
     } satisfies AnomalyEvent);
   }
 
-  if (isFirstSeen && !isBaseline && !isConfirmedNormal && !isBlocked) {
+  // Toast + NEW_IP event share the notifyOnNewIp setting (inventory, not a threat signal).
+  if (isFirstSeen && !isBaseline && !isConfirmedNormal && !isBlocked && ctx.monitoringConfig.notifyOnNewIp) {
     ctx.toast.notify(
-      ctx.monitoringConfig.notifyOnNewIp,
-      'New IP connection',
+      true,
+      'New remote IP',
       `${native.ip} (${native.country || 'Unknown'}) port ${native.port}`
     );
     ctx.anomalies.trigger({
@@ -92,8 +100,8 @@ export function ingestNativeSession(native: NativeIpSession, ctx: IngestTickCont
       ip: native.ip,
       timestamp: ctx.timeStr,
       type: 'NEW_IP',
-      severity: 'medium',
-      message: `New connection to ${native.ip} (${native.country})`,
+      severity: 'low',
+      message: `First seen this run: ${native.ip} (${native.country})`,
       resolved: false,
     } satisfies AnomalyEvent);
   }
@@ -118,7 +126,9 @@ export function ingestNativeSession(native: NativeIpSession, ctx: IngestTickCont
   };
 
   ctx.sessions.set(native.ip, currentSession);
-  ctx.geo.upsertCountrySession(currentSession, { pIn, pOut, tPackets, bIn, bOut, tBytes });
+  const deltas = { pIn, pOut, tPackets, bIn, bOut, tBytes };
+  ctx.geo.upsertCountrySession(currentSession, deltas);
+  ctx.sessionHistory.upsert(currentSession, deltas);
 
   return { pIn, pOut, bIn, bOut, tBytes, tickStat };
 }
@@ -134,8 +144,10 @@ export function ingestNativeSessionList(
   let secBytesIn = 0;
   let secBytesOut = 0;
   const ipTickStats: SpikeHistoryEntry['topIps'] = [];
+  const liveIps = new Set<string>();
 
   for (const native of rawNativeList) {
+    if (native?.ip) liveIps.add(native.ip);
     const { pIn, pOut, bIn, bOut, tBytes, tickStat } = ingestNativeSession(native, ctx);
     if (tickStat) ipTickStats.push(tickStat);
     secPacketsIn += pIn;
@@ -143,6 +155,10 @@ export function ingestNativeSessionList(
     secBytesIn += bIn;
     secBytesOut += bOut;
     secBytes += tBytes;
+  }
+
+  if (ctx.reconcileActive) {
+    reconcileActiveSessions(ctx.sessions, liveIps);
   }
 
   return { secPacketsIn, secPacketsOut, secBytes, secBytesIn, secBytesOut, ipTickStats };

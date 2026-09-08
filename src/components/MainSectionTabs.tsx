@@ -17,6 +17,7 @@ type Props = {
   mainSection: MainSection;
   onSectionChange: (section: MainSection) => void;
   sessions: IpSession[];
+  cumulativeSessions: IpSession[];
   anomalies: AnomalyEvent[];
   spikeHistory: SpikeHistoryEntry[];
   processBreakdown: ProcessTrafficPoint[];
@@ -34,6 +35,7 @@ export function MainSectionTabs({
   mainSection,
   onSectionChange,
   sessions,
+  cumulativeSessions,
   anomalies,
   spikeHistory,
   processBreakdown,
@@ -71,7 +73,7 @@ export function MainSectionTabs({
           }`}
         >
           <ShieldAlert className="w-3.5 h-3.5" />
-          Anomaly Feed
+          Event log
           {unresolvedAnomalyCount > 0 && (
             <span className="min-w-[1.25rem] h-5 px-1.5 inline-flex items-center justify-center text-[10px] font-bold bg-rose-500 text-white rounded-full">
               {unresolvedAnomalyCount > 99 ? '99+' : unresolvedAnomalyCount}
@@ -100,6 +102,7 @@ export function MainSectionTabs({
       {mainSection === 'hub' ? (
         <HubCard
           sessions={sessions}
+          cumulativeSessions={cumulativeSessions}
           processes={processBreakdown}
           cumulativeProcesses={cumulativeProcessBreakdown}
           geoNodes={geoNodes}
@@ -112,6 +115,7 @@ export function MainSectionTabs({
           onToggleBlock={actions.toggleBlockIp}
           onClearCumulativeProcesses={actions.clearCumulativeProcesses}
           onClearCumulativeGeoNodes={actions.clearCumulativeGeoNodes}
+          onClearCumulativeSessions={actions.clearCumulativeSessions}
           getCumulativeGeoSessions={actions.getCumulativeGeoSessions}
         />
       ) : mainSection === 'anomalies' ? (

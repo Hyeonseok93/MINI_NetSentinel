@@ -49,6 +49,16 @@ function parseForeignAddr(foreignAddr) {
   return { ip, port: port || 0 };
 }
 
+/** Prefer TCP+UDP when both were observed for the same remote IP this tick. */
+function finalizeSessionProtocol(fromTcp, fromUdp, fallback) {
+  if (fromTcp && fromUdp) return 'TCP+UDP';
+  if (fromUdp && !fromTcp) return 'UDP';
+  if (fromTcp) return 'TCP';
+  const p = String(fallback || 'TCP').toUpperCase();
+  if (p === 'UDP' || p === 'TCP+UDP' || p === 'TCP') return p;
+  return 'TCP';
+}
+
 function trafficForIp(captureMode, npcapDelta, ip) {
   const live = npcapDelta.get(ip);
   if (captureMode === 'npcap' && live) {
@@ -72,18 +82,18 @@ function upsertSession(sessionsMap, { ip, port, protocol, timeStr, captureMode, 
       ip,
       domain: resolveDomain(ip),
       country: geo.country,
-      country_code: geo.country_code,
-      packets_in: pIn,
-      packets_out: pOut,
-      total_packets: pIn + pOut,
-      bytes_in: bIn,
-      bytes_out: bOut,
-      total_bytes: bIn + bOut,
-      last_seen: timeStr,
+      countryCode: geo.country_code,
+      packetsIn: pIn,
+      packetsOut: pOut,
+      totalPackets: pIn + pOut,
+      bytesIn: bIn,
+      bytesOut: bOut,
+      totalBytes: bIn + bOut,
+      lastSeen: timeStr,
       status: 'new',
       protocol,
       port,
-      is_baseline: false,
+      isBaseline: false,
       _fromTcp: protocol === 'TCP',
       _fromUdp: protocol === 'UDP',
     });
@@ -93,9 +103,9 @@ function upsertSession(sessionsMap, { ip, port, protocol, timeStr, captureMode, 
   const existing = sessionsMap.get(ip);
   // Traffic already applied when first created from this IP; avoid double-counting
   // when both TCP and UDP netstat list the same remote in one tick.
-  existing.last_seen = timeStr;
+  existing.lastSeen = timeStr;
   existing.country = geo.country;
-  existing.country_code = geo.country_code;
+  existing.countryCode = geo.country_code;
 
   if (protocol === 'TCP') {
     existing._fromTcp = true;
@@ -211,18 +221,18 @@ async function fetchTelemetryPayload() {
           ip,
           domain: resolveDomain(ip),
           country: geo.country,
-          country_code: geo.country_code,
-          packets_in: pIn,
-          packets_out: pOut,
-          total_packets: pIn + pOut,
-          bytes_in: bIn,
-          bytes_out: bOut,
-          total_bytes: bIn + bOut,
-          last_seen: timeStr,
+          countryCode: geo.country_code,
+          packetsIn: pIn,
+          packetsOut: pOut,
+          totalPackets: pIn + pOut,
+          bytesIn: bIn,
+          bytesOut: bOut,
+          totalBytes: bIn + bOut,
+          lastSeen: timeStr,
           status: 'new',
           protocol,
           port,
-          is_baseline: false,
+          isBaseline: false,
           _fromTcp: protocol === 'TCP',
           _fromUdp: protocol === 'UDP',
         });
@@ -252,43 +262,52 @@ async function fetchTelemetryPayload() {
       applyEndpoint({ protocol: 'UDP', ip: parsed.ip, port: parsed.port, pid });
     }
 
-    // Include Npcap-seen remotes that netstat didn't list this tick
+    // Merge Npcap protocol hints onto netstat rows; add orphan remotes netstat missed
     if (captureMode === 'npcap') {
       for (const [ip, live] of npcapDelta.entries()) {
-        if (sessionsMap.has(ip)) continue;
         if (ip === '127.0.0.1' || ip.startsWith('127.')) continue;
         if (!isValidIpv4(ip)) continue;
-        const geo = resolveGeo(ip);
-        let protocol = 'TCP';
-        if (live.protocol === 'UDP' || (live.sawUdp && !live.sawTcp)) protocol = 'UDP';
-        else if (live.protocol === 'TCP' || live.sawTcp) protocol = 'TCP';
-        else if (live.sawUdp) protocol = 'UDP';
 
+        const fromTcp = !!(live.sawTcp || live.protocol === 'TCP');
+        const fromUdp = !!(live.sawUdp || live.protocol === 'UDP');
+        const existing = sessionsMap.get(ip);
+        if (existing) {
+          if (fromTcp) existing._fromTcp = true;
+          if (fromUdp) existing._fromUdp = true;
+          continue;
+        }
+
+        const geo = resolveGeo(ip);
         sessionsMap.set(ip, {
           id: `real-win-${ip.replace(/\./g, '-')}`,
           ip,
           domain: resolveDomain(ip),
           country: geo.country,
-          country_code: geo.country_code,
-          packets_in: live.packetsIn,
-          packets_out: live.packetsOut,
-          total_packets: live.packetsIn + live.packetsOut,
-          bytes_in: live.bytesIn,
-          bytes_out: live.bytesOut,
-          total_bytes: live.bytesIn + live.bytesOut,
-          last_seen: timeStr,
+          countryCode: geo.country_code,
+          packetsIn: live.packetsIn,
+          packetsOut: live.packetsOut,
+          totalPackets: live.packetsIn + live.packetsOut,
+          bytesIn: live.bytesIn,
+          bytesOut: live.bytesOut,
+          totalBytes: live.bytesIn + live.bytesOut,
+          lastSeen: timeStr,
           status: 'new',
-          protocol,
+          protocol: finalizeSessionProtocol(fromTcp, fromUdp, live.protocol),
           port: live.port || 0,
-          is_baseline: false,
+          isBaseline: false,
+          _fromTcp: fromTcp,
+          _fromUdp: fromUdp,
         });
       }
     }
 
-    // Strip internal merge flags
+    // Strip merge flags; label TCP+UDP when both were seen for this IP
     const sessions = Array.from(sessionsMap.values()).map((s) => {
       const { _fromTcp, _fromUdp, ...rest } = s;
-      return rest;
+      return {
+        ...rest,
+        protocol: finalizeSessionProtocol(_fromTcp, _fromUdp, rest.protocol),
+      };
     });
 
     return {
@@ -330,4 +349,5 @@ module.exports = {
   setCaptureDevice: (deviceName) => npcapCapture.setPreferredDevice(deviceName),
   // test helpers
   parseForeignAddr,
+  finalizeSessionProtocol,
 };
