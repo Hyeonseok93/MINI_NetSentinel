@@ -11,6 +11,8 @@
     "build": "npm run build:electron && tsc && vite build",
     "build:exe": "node scripts/test-telemetry.cjs && node scripts/download-geoip.cjs && npm run build:electron && tsc && vite build && node scripts/build-portable.cjs",
     "audit:wiring": "node scripts/audit-wiring.cjs",
+    "audit:offline": "node scripts/audit-wiring.cjs --offline",
+    "test": "node --test scripts/test/*.test.cjs",
     "clean:build": "node scripts/clean-old-builds.cjs",
     "preview": "vite preview"
   },

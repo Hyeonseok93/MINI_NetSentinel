@@ -81,10 +81,14 @@ function assert(cond, msg) {
 }
 
 async function main() {
+  const offline =
+    process.argv.includes('--offline') ||
+    process.env.NETSENTINEL_AUDIT_OFFLINE === '1' ||
+    process.env.CI === 'true';
   const failures = [];
   const notes = [];
 
-  console.log('=== NetSentinel wiring audit ===\n');
+  console.log(`=== NetSentinel wiring audit${offline ? ' (offline)' : ''} ===\n`);
 
   // 1) IPC matrix
   try {
@@ -125,7 +129,7 @@ async function main() {
     ]) {
       assert(typeof telemetry[fn] === 'function', `telemetry-core missing export: ${fn}`);
     }
-    for (const fn of ['firewallBlockIp', 'firewallUnblockIp']) {
+    for (const fn of ['firewallBlockIp', 'firewallUnblockIp', 'firewallListBlockedIps']) {
       assert(typeof firewall[fn] === 'function', `firewall missing export: ${fn}`);
     }
     for (const fn of ['listCaptureDevices', 'setPreferredDevice', 'startCapture', 'takeIntervalStats']) {
@@ -161,7 +165,15 @@ async function main() {
     );
     assert(engineTree.includes('firewall-block-ip'), 'Engine missing firewall-block-ip');
     assert(engine.includes('spikeThresholdPacketsPerSec'), 'Engine missing spike threshold use');
-    assert(engine.includes('autoBlockSuspicious'), 'Engine missing autoBlockSuspicious use');
+    assert(!/\bautoBlockSuspicious\b/.test(engine), 'Engine still has autoBlockSuspicious');
+    assert(!/\bisSuspicious\b/.test(read('scripts/telemetry-core.cjs')), 'telemetry still has isSuspicious');
+    assert(!/\bisThreatHeuristic\b/.test(engineTree), 'Engine still has isThreatHeuristic');
+    assert(engineTree.includes('membershipPersistence') || engine.includes('persistMembership'), 'Engine missing membership persistence');
+    assert(engine.includes('user-store-set') || read('src/services/userStore.ts').includes('user-store-set'), 'Renderer missing user-store client');
+    assert(!/\blocalStorage\.(get|set)Item\b/.test(read('src/hooks/useMonitoringConfig.ts')), 'monitoring config still uses localStorage');
+    const persistSrc = read('src/services/packetEngine/membershipPersistence.ts');
+    assert(persistSrc.includes('userStoreSet') || persistSrc.includes('user-store'), 'membership persist must use user-store');
+    assert(fs.existsSync(path.join(root, 'scripts', 'lib', 'user-store.cjs')), 'scripts/lib/user-store.cjs missing');
     assert(engine.includes('notifyOnNewIp'), 'Engine missing notifyOnNewIp use');
     assert(!app.includes('Ethernet 0 (Intel(R) Ethernet Connection)'), 'App still has fake hardcoded adapter default');
     assert(app.includes('ConfirmHost') && app.includes('ToastHost'), 'App missing ConfirmHost/ToastHost');
@@ -213,17 +225,23 @@ async function main() {
     failures.push(err.message);
   }
 
-  // 5) No code-signing leftover
+  // 5) Unsigned portable build is intentional (document, don't secretly sign)
   try {
     const build = read('scripts/build-portable.cjs');
     assert(!build.includes('WINDOWS_PFX'), 'build-portable still has code-signing hook');
     assert(!build.includes('signtool'), 'build-portable still references signtool');
-    console.log('✅ Code signing removed from build\n');
+    assert(fs.existsSync(path.join(root, 'LICENSE')), 'LICENSE file missing');
+    assert(read('README.md').includes('SmartScreen') || read('README.md').includes('Unsigned'), 'README should document unsigned builds');
+    assert(read('README.md').includes('GeoLite2') && read('README.md').includes('MaxMind'), 'README missing GeoLite/MaxMind attribution');
+    console.log('✅ Unsigned build + LICENSE/README attribution markers present\n');
   } catch (err) {
     failures.push(err.message);
   }
 
-  // 6) Live telemetry / npcap smoke
+  // 6) Live telemetry / npcap smoke (skipped in offline/CI)
+  if (offline) {
+    notes.push('Skipped live Npcap/telemetry smoke (--offline / CI)');
+  } else {
   try {
     const geo = await telemetry.ensureGeoIp({
       writablePath: path.join(root, 'data', telemetry.GEOIP_DB_FILENAME),
@@ -263,6 +281,7 @@ async function main() {
       telemetry.stopPacketCapture();
     } catch (_) {}
     failures.push(`Live smoke: ${err.message}`);
+  }
   }
 
   // 7) Firewall module sanity (no elevate required — just validation path)
