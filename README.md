@@ -75,7 +75,6 @@ MINI_NetSentinel/
 ┃   ┗━━ …
 ┣━━ 📂 data/                    # GeoIP DB · Vite 개발용 user-store
 ┣━━ 📄 package.json
-┣━━ 📄 LICENSE
 ┗━━ 📄 README.md
 ```
 
@@ -153,5 +152,5 @@ npm run audit:offline    # CI용 (live Npcap 없음)
 
 ## 📄 License
 
-MIT — see [LICENSE](./LICENSE).  
+This project is licensed under the MIT License.  
 Third-party (Electron, Npcap, MaxMind GeoLite2 등)는 각 라이선스를 따릅니다.

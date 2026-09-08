@@ -231,10 +231,10 @@ async function main() {
     const build = read('scripts/build-portable.cjs');
     assert(!build.includes('WINDOWS_PFX'), 'build-portable still has code-signing hook');
     assert(!build.includes('signtool'), 'build-portable still references signtool');
-    assert(fs.existsSync(path.join(root, 'LICENSE')), 'LICENSE file missing');
+    assert(read('README.md').includes('MIT License'), 'README should declare MIT License');
     assert(read('README.md').includes('SmartScreen') || read('README.md').includes('Unsigned'), 'README should document unsigned builds');
     assert(read('README.md').includes('GeoLite2') && read('README.md').includes('MaxMind'), 'README missing GeoLite/MaxMind attribution');
-    console.log('✅ Unsigned build + LICENSE/README attribution markers present\n');
+    console.log('✅ Unsigned build + README attribution markers present\n');
   } catch (err) {
     failures.push(err.message);
   }
