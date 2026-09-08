@@ -1,4 +1,5 @@
 import type { SpikeHistoryEntry } from '../../types/network';
+import { MIN_HISTORY_SPIKE_PACKETS_PER_SEC } from './limits.ts';
 
 export function shouldRecordSpike(args: {
   totalPkts: number;
@@ -14,7 +15,7 @@ export function shouldRecordSpike(args: {
   const avg =
     recentTotals.reduce((s, n) => s + n, 0) / Math.max(1, recentTotals.length);
   // User-configurable absolute floor (Settings → History Spike Threshold)
-  const absFloor = Math.max(20, historyThreshold);
+  const absFloor = Math.max(MIN_HISTORY_SPIKE_PACKETS_PER_SEC, historyThreshold);
   // Also catch sudden surges vs recent average (at least 2× avg, and at least absFloor)
   const relativeFloor = Math.max(absFloor, avg * 2.5);
   const isSpike = totalPkts >= relativeFloor;

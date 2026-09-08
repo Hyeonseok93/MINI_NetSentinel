@@ -3,6 +3,10 @@ import { X, Sliders, Bell, Cpu, Globe, RefreshCw, HardDrive, ChevronDown, Rotate
 import { MonitoringConfig } from '../types/network';
 import { getElectronIpc, isElectronShell } from '../utils/electronIpc';
 import { askConfirm } from '../ui/confirmBus';
+import {
+  DEFAULT_REFRESH_INTERVAL_MS,
+  MIN_HISTORY_SPIKE_PACKETS_PER_SEC,
+} from '../services/packetEngine/limits';
 
 interface SettingsModalProps {
   isOpen: boolean;
@@ -27,6 +31,9 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   const [historySpikeThreshold, setHistorySpikeThreshold] = useState(
     config.historySpikePacketsPerSec ?? 200
   );
+  const [refreshIntervalMs, setRefreshIntervalMs] = useState(
+    config.refreshIntervalMs ?? DEFAULT_REFRESH_INTERVAL_MS
+  );
   const [notifyNewIp, setNotifyNewIp] = useState(config.notifyOnNewIp);
   const [dailyQuotaValue, setDailyQuotaValue] = useState(config.dailyQuotaValue || 10);
   const [dailyQuotaUnit, setDailyQuotaUnit] = useState<'KB' | 'MB' | 'GB' | 'TB'>(config.dailyQuotaUnit || 'GB');
@@ -42,6 +49,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
     if (!isOpen) return;
     setSpikeThreshold(config.spikeThresholdPacketsPerSec);
     setHistorySpikeThreshold(config.historySpikePacketsPerSec ?? 200);
+    setRefreshIntervalMs(config.refreshIntervalMs ?? DEFAULT_REFRESH_INTERVAL_MS);
     setNotifyNewIp(config.notifyOnNewIp);
     setDailyQuotaValue(config.dailyQuotaValue || 10);
     setDailyQuotaUnit(config.dailyQuotaUnit || 'GB');
@@ -100,8 +108,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
       if (!status?.active) {
         setGeoIpError('Download finished but DB failed to open');
       }
-    } catch (err: any) {
-      setGeoIpError(err?.message || 'GeoIP download failed');
+    } catch (err: unknown) {
+      setGeoIpError(err instanceof Error ? err.message : 'GeoIP download failed');
     } finally {
       setIsUpdatingGeoIp(false);
     }
@@ -113,7 +121,11 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
     onSaveConfig({
       ...config,
       spikeThresholdPacketsPerSec: Math.max(1, Math.floor(spikeThreshold) || 40),
-      historySpikePacketsPerSec: Math.max(1, Math.floor(historySpikeThreshold) || 200),
+      historySpikePacketsPerSec: Math.max(
+        MIN_HISTORY_SPIKE_PACKETS_PER_SEC,
+        Math.floor(historySpikeThreshold) || 200
+      ),
+      refreshIntervalMs,
       notifyOnNewIp: notifyNewIp,
       activeInterface: activeInterface || config.activeInterface,
       dailyQuotaValue: Math.max(1, dailyQuotaValue || 1),
@@ -329,21 +341,48 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
             <div className="flex items-center gap-2">
               <input
                 type="number"
-                min="1"
+                min={MIN_HISTORY_SPIKE_PACKETS_PER_SEC}
                 max="1000000"
                 step="1"
                 inputMode="numeric"
                 value={historySpikeThreshold}
                 onChange={(e) => {
                   const n = Math.floor(Number(e.target.value));
-                  setHistorySpikeThreshold(Number.isFinite(n) ? Math.max(1, n) : 1);
+                  setHistorySpikeThreshold(
+                    Number.isFinite(n) ? Math.max(MIN_HISTORY_SPIKE_PACKETS_PER_SEC, n) : MIN_HISTORY_SPIKE_PACKETS_PER_SEC
+                  );
                 }}
                 className="no-spinner flex-1 px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-xs font-mono font-bold text-amber-300 focus:outline-none focus:border-amber-500/50"
               />
               <span className="text-[11px] font-mono text-slate-400 whitespace-nowrap shrink-0">pkts/sec</span>
             </div>
             <p className="text-[11px] text-slate-500 mt-1">
-              Records a History snapshot when total chart traffic (all IPs) reaches this rate, or ~2.5× the recent average.
+              Records a History snapshot when total chart traffic (all IPs) reaches this rate, or ~2.5× the recent average
+              (minimum {MIN_HISTORY_SPIKE_PACKETS_PER_SEC}).
+            </p>
+          </div>
+
+          {/* Poll interval */}
+          <div>
+            <label className="font-semibold text-slate-200 flex items-center gap-1.5 mb-1.5">
+              <RefreshCw className="w-3.5 h-3.5 text-cyan-400" />
+              Poll Interval
+            </label>
+            <div className="relative">
+              <select
+                value={refreshIntervalMs}
+                onChange={(e) => setRefreshIntervalMs(Number(e.target.value))}
+                className="w-full pl-3 pr-9 py-2 bg-slate-900 border border-slate-800 rounded-xl text-xs font-mono font-bold text-cyan-300 focus:outline-none focus:border-cyan-500/50 appearance-none cursor-pointer"
+              >
+                <option value={500}>0.5 s</option>
+                <option value={1000}>1 s</option>
+                <option value={2000}>2 s</option>
+                <option value={5000}>5 s</option>
+              </select>
+              <ChevronDown className="w-4 h-4 text-cyan-400 absolute right-3 top-2.5 pointer-events-none" />
+            </div>
+            <p className="text-[11px] text-slate-500 mt-1">
+              How often live telemetry is refreshed while monitoring is on.
             </p>
           </div>
 

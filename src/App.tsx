@@ -38,8 +38,10 @@ export function App() {
   const dailyQuotaBytes = quotaToBytes(config.dailyQuotaValue || 10, config.dailyQuotaUnit || 'GB');
   const { rxBytesPerSec, txBytesPerSec } = latestTrafficRates(snap.history);
 
-  const topProcess =
-    sortGroupedProcessesByBytesDesc(groupProcessesByName(snap.processBreakdown))[0] ?? null;
+  const liveGroupedProcesses = sortGroupedProcessesByBytesDesc(
+    groupProcessesByName(snap.processBreakdown)
+  );
+  const topProcess = liveGroupedProcesses[0] ?? null;
   const topSession =
     [...snap.sessions].sort((a, b) => b.totalBytes - a.totalBytes)[0] ?? null;
 
@@ -105,9 +107,7 @@ export function App() {
           />
 
           <BandwidthGaugeCard
-            processes={sortGroupedProcessesByBytesDesc(
-              groupProcessesByName(snap.processBreakdown)
-            )}
+            processes={liveGroupedProcesses}
             history={snap.history}
           />
 

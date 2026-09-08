@@ -6,6 +6,8 @@ export class DailyQuotaStore {
   private hydrated = false;
   private bytesToday = 0;
   private dayKey = '';
+  /** Bytes seen before disk hydrate finishes — merged in bootstrap. */
+  private pendingBytes = 0;
   private persistTimer: number | null = null;
 
   async bootstrap(onReady?: () => void) {
@@ -24,7 +26,12 @@ export class DailyQuotaStore {
       this.dayKey = localDayKey();
       this.bytesToday = 0;
     }
+    if (this.pendingBytes > 0) {
+      this.bytesToday += this.pendingBytes;
+      this.pendingBytes = 0;
+    }
     this.hydrated = true;
+    if (this.bytesToday > 0) this.schedulePersist();
     onReady?.();
   }
 
@@ -37,20 +44,27 @@ export class DailyQuotaStore {
 
   addBytes(delta: number) {
     if (!Number.isFinite(delta) || delta <= 0) return;
+    if (!this.hydrated) {
+      this.pendingBytes += delta;
+      return;
+    }
     this.rollDay();
     this.bytesToday += delta;
     this.schedulePersist();
   }
 
   getBytesToday(): number {
+    if (!this.hydrated) return this.pendingBytes;
     this.rollDay();
     return this.bytesToday;
   }
 
   /** Reset to empty for today and persist immediately. */
   resetToday() {
+    this.pendingBytes = 0;
     this.dayKey = localDayKey();
     this.bytesToday = 0;
+    if (!this.hydrated) return;
     void savePersistedQuotaDaily({ version: 1, day: this.dayKey, bytes: 0 });
   }
 

@@ -3,20 +3,40 @@ import type { MonitoringConfig } from '../types/network';
 import { getElectronIpcOrWarn } from '../utils/electronIpc';
 import { realPacketEngine as packetEngine } from '../services/realPacketEngine';
 import { userStoreGet, userStoreSet } from '../services/userStore';
+import {
+  DEFAULT_REFRESH_INTERVAL_MS,
+  MAX_REFRESH_INTERVAL_MS,
+  MIN_HISTORY_SPIKE_PACKETS_PER_SEC,
+  MIN_REFRESH_INTERVAL_MS,
+} from '../services/packetEngine/limits';
 
 const DEFAULT_MONITORING_CONFIG: MonitoringConfig = {
   spikeThresholdPacketsPerSec: 40,
   historySpikePacketsPerSec: 200,
   notifyOnNewIp: false,
-  refreshIntervalMs: 1000,
+  refreshIntervalMs: DEFAULT_REFRESH_INTERVAL_MS,
   activeInterface: '',
   dailyQuotaValue: 10,
   dailyQuotaUnit: 'GB',
 };
 
+function clampRefreshIntervalMs(raw: unknown): number {
+  const n = typeof raw === 'number' ? raw : Number(raw);
+  if (!Number.isFinite(n)) return DEFAULT_REFRESH_INTERVAL_MS;
+  return Math.min(MAX_REFRESH_INTERVAL_MS, Math.max(MIN_REFRESH_INTERVAL_MS, Math.round(n)));
+}
+
 function normalizeConfig(raw: unknown): MonitoringConfig {
   if (!raw || typeof raw !== 'object') return { ...DEFAULT_MONITORING_CONFIG };
-  return { ...DEFAULT_MONITORING_CONFIG, ...(raw as Partial<MonitoringConfig>) };
+  const merged = { ...DEFAULT_MONITORING_CONFIG, ...(raw as Partial<MonitoringConfig>) };
+  merged.refreshIntervalMs = clampRefreshIntervalMs(merged.refreshIntervalMs);
+  if (typeof merged.historySpikePacketsPerSec === 'number') {
+    merged.historySpikePacketsPerSec = Math.max(
+      MIN_HISTORY_SPIKE_PACKETS_PER_SEC,
+      Math.floor(merged.historySpikePacketsPerSec) || 200
+    );
+  }
+  return merged;
 }
 
 async function loadStoredConfig(): Promise<MonitoringConfig> {
@@ -80,9 +100,10 @@ export function useMonitoringConfig() {
   }, []);
 
   const saveConfig = useCallback((newConfig: MonitoringConfig) => {
-    setConfig(newConfig);
-    void persistConfig(newConfig);
-    applyToEngine(newConfig);
+    const next = normalizeConfig(newConfig);
+    setConfig(next);
+    void persistConfig(next);
+    applyToEngine(next);
   }, []);
 
   const resetToDefaults = useCallback(async () => {

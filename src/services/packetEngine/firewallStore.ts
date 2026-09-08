@@ -110,20 +110,62 @@ export class FirewallStore {
     if (!safeIp) {
       return { ok: false, error: `Invalid IPv4 address: ${ip}` };
     }
-    this.blockedIps.delete(safeIp);
-    this.blockedIpReasons.delete(safeIp);
-    this.blockedIpAt.delete(safeIp);
-    deps.applySessionMembership(safeIp);
+
+    const prevReason = this.blockedIpReasons.get(safeIp);
+    const prevAt = this.blockedIpAt.get(safeIp);
+    const hadLocal = this.blockedIps.has(safeIp);
+
+    const applyLocalUnblock = () => {
+      this.blockedIps.delete(safeIp);
+      this.blockedIpReasons.delete(safeIp);
+      this.blockedIpAt.delete(safeIp);
+      deps.applySessionMembership(safeIp);
+    };
+
+    const restoreLocalBlock = () => {
+      if (!hadLocal) return;
+      this.blockedIps.add(safeIp);
+      if (prevReason != null) this.blockedIpReasons.set(safeIp, prevReason);
+      if (prevAt != null) this.blockedIpAt.set(safeIp, prevAt);
+      deps.applySessionMembership(safeIp);
+    };
+
+    applyLocalUnblock();
     deps.notify();
 
     const ipc = getElectronIpcOrWarn('Firewall');
     if (ipc) {
       try {
-        return await ipc.invoke('firewall-unblock-ip', safeIp);
+        const result = await ipc.invoke('firewall-unblock-ip', safeIp);
+        if (result && result.ok === false) {
+          restoreLocalBlock();
+          deps.setConnectionStatus({
+            ...deps.connectionStatus,
+            lastError: result.error || 'Firewall unblock failed',
+          });
+          deps.notify();
+        }
+        return result;
       } catch (err: unknown) {
         const message = err instanceof Error ? err.message : String(err);
+        restoreLocalBlock();
+        deps.setConnectionStatus({
+          ...deps.connectionStatus,
+          lastError: message || 'Firewall unblock IPC failed',
+        });
+        deps.notify();
         return { ok: false, error: message };
       }
+    }
+
+    if (isElectronShell() || deps.connectionStatus.mode === 'electron') {
+      restoreLocalBlock();
+      deps.setConnectionStatus({
+        ...deps.connectionStatus,
+        lastError: 'Firewall IPC unavailable',
+      });
+      deps.notify();
+      return { ok: false, error: 'Firewall IPC unavailable' };
     }
     return { ok: false, error: 'Firewall IPC unavailable (UI-only unblock applied)' };
   }

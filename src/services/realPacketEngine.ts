@@ -10,7 +10,11 @@ import {
 } from '../types/network';
 import { getElectronIpc, isElectronShell, warnIpcUnavailable } from '../utils/electronIpc';
 import { groupProcessesByName, sortGroupedProcessesByBytesDesc } from '../utils/groupProcesses';
-import { MAX_TRAFFIC_HISTORY_UI, MAX_SEEN_IPS } from './packetEngine/constants';
+import {
+  MAX_TRAFFIC_HISTORY_UI,
+  MAX_SEEN_IPS,
+  MIN_HISTORY_SPIKE_PACKETS_PER_SEC,
+} from './packetEngine/limits';
 import { type NativeIpSession } from './packetEngine/nativeSession';
 import { formatClock } from './packetEngine/time';
 import { ingestNativeSessionList } from './packetEngine/sessionIngest';
@@ -131,7 +135,10 @@ export class RealPacketEngine {
       this.monitoringConfig.spikeThresholdPacketsPerSec = config.spikeThresholdPacketsPerSec;
     }
     if (typeof config.historySpikePacketsPerSec === 'number') {
-      this.monitoringConfig.historySpikePacketsPerSec = Math.max(20, config.historySpikePacketsPerSec);
+      this.monitoringConfig.historySpikePacketsPerSec = Math.max(
+        MIN_HISTORY_SPIKE_PACKETS_PER_SEC,
+        config.historySpikePacketsPerSec
+      );
     }
     if (typeof config.notifyOnNewIp === 'boolean') {
       this.monitoringConfig.notifyOnNewIp = config.notifyOnNewIp;
