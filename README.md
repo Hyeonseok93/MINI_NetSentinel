@@ -5,8 +5,6 @@
 Windows **Electron + React + Vite** 기반의 **개인용 네트워크 모니터**입니다.  
 Npcap이 있으면 패킷 바이트까지, 없으면 Netstat로 TCP 연결 목록을 보여 주며, GeoIP 국가 라벨과 **수동** Windows Firewall 차단 도우미를 제공합니다.
 
-엔터프라이즈 위협 탐지 제품이 아니라, 휴대용/개인 유틸리티입니다.
-
 ## 🛠️ Built With
 
 <picture>
