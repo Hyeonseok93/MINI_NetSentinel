@@ -29,8 +29,8 @@ data/npcap*.exe
 *.local
 
 # Editor directories and files
-.vscode/*
-!.vscode/extensions.json
+.vscode/
+.cursorignore
 .idea
 .DS_Store
 Thumbs.db
