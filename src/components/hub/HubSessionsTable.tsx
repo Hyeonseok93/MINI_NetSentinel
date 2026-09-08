@@ -80,7 +80,7 @@ export const HubSessionsTable: React.FC<HubSessionsTableProps> = ({
                     ) : session.isBaseline ? (
                       <span className="w-2 h-2 rounded-full bg-emerald-400 shrink-0" title="Trusted Baseline" />
                     ) : session.status === 'suspicious' ? (
-                      <span className="w-2 h-2 rounded-full bg-rose-500 shrink-0 animate-ping" title="Suspicious Threat" />
+                      <span className="w-2 h-2 rounded-full bg-rose-500 shrink-0 animate-ping" title="Traffic spike" />
                     ) : session.status === 'new' ? (
                       <span className="w-2 h-2 rounded-full bg-amber-400 shrink-0 animate-pulse" title="New Initial Connection" />
                     ) : (
@@ -108,7 +108,7 @@ export const HubSessionsTable: React.FC<HubSessionsTableProps> = ({
                       </span>
                     ) : session.status === 'suspicious' ? (
                       <span className="px-1 text-[9px] font-bold rounded bg-rose-500/20 text-rose-300 border border-rose-500/30 shrink-0">
-                        RISK
+                        SPIKE
                       </span>
                     ) : session.status === 'new' ? (
                       <span className="px-1 text-[9px] font-bold rounded bg-amber-500/20 text-amber-300 border border-amber-500/30 shrink-0">

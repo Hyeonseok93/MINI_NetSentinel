@@ -32,7 +32,7 @@ export class TrustStore {
   applyToSession(
     ip: string,
     deps: TrustStoreDeps,
-    hints?: { isTrafficSpike?: boolean; isThreatHeuristic?: boolean }
+    hints?: { isTrafficSpike?: boolean }
   ) {
     const sess = deps.sessions.get(ip);
     if (!sess) return;

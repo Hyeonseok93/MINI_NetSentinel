@@ -8,7 +8,6 @@ import type { ToastGate } from './toastGate';
 export type IngestMonitoringConfig = {
   spikeThresholdPacketsPerSec: number;
   notifyOnNewIp: boolean;
-  autoBlockSuspicious: boolean;
 };
 
 export type IngestTickContext = {
@@ -20,7 +19,6 @@ export type IngestTickContext = {
   toast: ToastGate;
   geo: GeoStore;
   sessions: Map<string, IpSession>;
-  blockIp: (ip: string, reason: string) => void | Promise<void>;
 };
 
 export type IngestTickResult = {
@@ -68,11 +66,10 @@ export function ingestNativeSession(native: NativeIpSession, ctx: IngestTickCont
 
   const packetsThisSec = pIn + pOut;
   const isTrafficSpike = packetsThisSec >= ctx.monitoringConfig.spikeThresholdPacketsPerSec;
-  const isThreatHeuristic = native.status === 'suspicious';
   const { status: resolvedStatus, isBaseline: membershipBaseline } = resolveSessionMembership(
     native.ip,
     sets,
-    { isTrafficSpike, isThreatHeuristic }
+    { isTrafficSpike }
   );
 
   if (!isBlocked && !isBaseline && !isConfirmedNormal && isTrafficSpike) {
@@ -125,24 +122,6 @@ export function ingestNativeSession(native: NativeIpSession, ctx: IngestTickCont
 
   ctx.sessions.set(native.ip, currentSession);
   ctx.geo.upsertCountrySession(currentSession, { pIn, pOut, tPackets, bIn, bOut, tBytes });
-
-  if (resolvedStatus === 'suspicious' && !isBaseline && !isConfirmedNormal) {
-    if (native.port === 4444) {
-      ctx.anomalies.trigger({
-        id: `anom-port-${native.ip}-${Date.now()}`,
-        ip: native.ip,
-        timestamp: ctx.timeStr,
-        type: 'SUSPICIOUS_PORT',
-        severity: 'high',
-        message: `Unrecognized connection to high-risk IP ${native.ip} (${native.country}) on port 4444`,
-        resolved: false,
-      } satisfies AnomalyEvent);
-    }
-
-    if (ctx.monitoringConfig.autoBlockSuspicious && !isBlocked && isThreatHeuristic) {
-      void ctx.blockIp(native.ip, 'Auto-block: suspicious traffic');
-    }
-  }
 
   return { pIn, pOut, bIn, bOut, tBytes, tickStat };
 }

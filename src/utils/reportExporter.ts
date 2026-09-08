@@ -38,7 +38,7 @@ export const exportAuditReportCsv = (
   csvContent += `\r\n`;
 
   // SECTION 4: GEO THREAT DESTINATIONS TABLE
-  csvContent += `=== Geo Threat Country Distribution ===\r\n`;
+  csvContent += `=== Geo Country Distribution ===\r\n`;
   csvContent += `Country,Country Code,Active IP Count,Total Bytes,Formatted Volume\r\n`;
   geoNodes.forEach((g) => {
     const countryName = `"${g.country.replace(/"/g, '""')}"`;

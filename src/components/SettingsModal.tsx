@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { X, Sliders, Bell, Cpu, ShieldCheck, Globe, RefreshCw, HardDrive, ChevronDown, RotateCcw, History } from 'lucide-react';
+import { X, Sliders, Bell, Cpu, Globe, RefreshCw, HardDrive, ChevronDown, RotateCcw, History } from 'lucide-react';
 import { MonitoringConfig } from '../types/network';
 import { getElectronIpc, isElectronShell } from '../utils/electronIpc';
 import { askConfirm } from '../ui/confirmBus';
@@ -25,7 +25,6 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
     config.historySpikePacketsPerSec ?? 200
   );
   const [notifyNewIp, setNotifyNewIp] = useState(config.notifyOnNewIp);
-  const [autoBlock, setAutoBlock] = useState(config.autoBlockSuspicious);
   const [dailyQuotaValue, setDailyQuotaValue] = useState(config.dailyQuotaValue || 10);
   const [dailyQuotaUnit, setDailyQuotaUnit] = useState<'KB' | 'MB' | 'GB' | 'TB'>(config.dailyQuotaUnit || 'GB');
   const [activeInterface, setActiveInterface] = useState(config.activeInterface || '');
@@ -41,7 +40,6 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
     setSpikeThreshold(config.spikeThresholdPacketsPerSec);
     setHistorySpikeThreshold(config.historySpikePacketsPerSec ?? 200);
     setNotifyNewIp(config.notifyOnNewIp);
-    setAutoBlock(config.autoBlockSuspicious);
     setDailyQuotaValue(config.dailyQuotaValue || 10);
     setDailyQuotaUnit(config.dailyQuotaUnit || 'GB');
     setActiveInterface(config.activeInterface || '');
@@ -114,7 +112,6 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
       spikeThresholdPacketsPerSec: Math.max(1, Math.floor(spikeThreshold) || 40),
       historySpikePacketsPerSec: Math.max(1, Math.floor(historySpikeThreshold) || 200),
       notifyOnNewIp: notifyNewIp,
-      autoBlockSuspicious: autoBlock,
       activeInterface: activeInterface || config.activeInterface,
       dailyQuotaValue: Math.max(1, dailyQuotaValue || 1),
       dailyQuotaUnit: dailyQuotaUnit,
@@ -152,7 +149,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-1.5 font-semibold text-slate-200">
                 <Globe className="w-3.5 h-3.5 text-emerald-400" />
-                <span>MaxMind GeoLite2 DB Engine</span>
+                <span>MaxMind GeoLite2 country DB</span>
               </div>
               <span className={`px-2 py-0.5 text-[9px] font-mono font-bold rounded-full border ${
                 geoIpActive
@@ -180,8 +177,22 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
               className="w-full py-2 px-3 rounded-xl bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 border border-emerald-500/40 font-bold transition-all flex items-center justify-center gap-2 text-xs disabled:opacity-60"
             >
               <RefreshCw className={`w-3.5 h-3.5 text-emerald-400 ${isUpdatingGeoIp ? 'animate-spin' : ''}`} />
-              <span>{isUpdatingGeoIp ? 'Downloading Latest DB...' : '🔄 Update GeoIP DB Now'}</span>
+              <span>{isUpdatingGeoIp ? 'Downloading Latest DB...' : 'Update GeoIP DB Now'}</span>
             </button>
+            <p className="text-[10px] text-slate-500 leading-relaxed">
+              This product includes GeoLite2 data created by MaxMind, available from{' '}
+              <button
+                type="button"
+                className="text-cyan-400/90 underline underline-offset-2"
+                onClick={() => {
+                  const ipc = getElectronIpc();
+                  if (ipc) void ipc.invoke('open-external-url', 'https://www.maxmind.com');
+                }}
+              >
+                maxmind.com
+              </button>
+              . Checksums verified on download; see README for redistribution notes.
+            </p>
           </div>
 
           {/* SECTION 2: Adapter Interface */}
@@ -349,24 +360,6 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
             />
           </div>
 
-          {/* SECTION 5: Auto Firewall Block Toggle */}
-          <div className="flex items-center justify-between p-3 rounded-xl bg-slate-900/60 border border-slate-800">
-            <div>
-              <p className="font-semibold text-slate-200 flex items-center gap-1.5">
-                <ShieldCheck className="w-3.5 h-3.5 text-rose-400" />
-                Kernel Firewall Auto-Block
-              </p>
-              <p className="text-[11px] text-slate-500 mt-0.5">
-                Auto-add Windows Firewall block rules for threat-heuristic suspicious IPs (not traffic spikes alone).
-              </p>
-            </div>
-            <input
-              type="checkbox"
-              checked={autoBlock}
-              onChange={(e) => setAutoBlock(e.target.checked)}
-              className="w-4 h-4 accent-rose-400 rounded cursor-pointer"
-            />
-          </div>
           </div>
 
           {/* Footer — always visible */}
@@ -378,7 +371,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
               const ok = await askConfirm({
                 title: 'Reset everything to defaults?',
                 message:
-                  '• Settings → factory defaults (toast/auto-block OFF)\n' +
+                  '• Settings → factory defaults (new-IP toasts OFF)\n' +
                   '• Verified / Trusted / Blocked → cleared (built-in trusted kept)\n' +
                   '• Anomalies & traffic totals → cleared\n' +
                   '• IPs will be re-learned as NEW',

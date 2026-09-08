@@ -30,7 +30,7 @@ export interface AnomalyEvent {
   id: string;
   timestamp: string;
   ip: string;
-  type: 'NEW_IP' | 'TRAFFIC_SPIKE' | 'SUSPICIOUS_PORT';
+  type: 'NEW_IP' | 'TRAFFIC_SPIKE';
   severity: 'low' | 'medium' | 'high';
   message: string;
   resolved: boolean;
@@ -65,7 +65,6 @@ export interface MonitoringConfig {
   /** Aggregate chart pkts/s that records a History snapshot */
   historySpikePacketsPerSec: number;
   notifyOnNewIp: boolean;
-  autoBlockSuspicious: boolean;
   refreshIntervalMs: number;
   activeInterface: string;
   dailyQuotaValue: number;

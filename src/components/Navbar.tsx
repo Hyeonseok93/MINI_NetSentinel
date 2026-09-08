@@ -114,7 +114,7 @@ export const Navbar: React.FC<NavbarProps> = ({
             <h1 className="text-[15px] font-bold text-slate-100 tracking-tight truncate">
               NetSentinel
             </h1>
-            <p className="text-[10px] text-slate-500 font-mono truncate">Enterprise Monitor</p>
+            <p className="text-[10px] text-slate-500 font-mono truncate">Network Monitor</p>
           </div>
         </div>
 

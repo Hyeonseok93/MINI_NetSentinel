@@ -168,7 +168,7 @@ export function HubTabControls({
                   : 'text-slate-400 hover:text-slate-200'
               }`}
             >
-              Suspicious
+              Spike
             </button>
             <button
               type="button"

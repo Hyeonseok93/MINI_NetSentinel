@@ -14,10 +14,6 @@ const {
 
 const execFileAsync = util.promisify(execFile);
 
-function isSuspicious(ip, port) {
-  return port === 4444 || port === 9001 || ip.startsWith('185.220.') || ip.startsWith('45.154.');
-}
-
 /** Domain hints only — must NOT auto-trust / auto-verify sessions.
  *  Strict: exact famous IPs (or tiny private LAN hint). No wide prefix guesses. */
 const { FAMOUS_DOMAIN_BY_IP } = require('./lib/famous-ips.cjs');
@@ -150,7 +146,7 @@ async function fetchTelemetryPayload() {
           bytes_out: bOut,
           total_bytes: bIn + bOut,
           last_seen: timeStr,
-          status: isSuspicious(ip, port) ? 'suspicious' : 'new',
+          status: 'new',
           protocol: 'TCP',
           port,
           is_baseline: false,

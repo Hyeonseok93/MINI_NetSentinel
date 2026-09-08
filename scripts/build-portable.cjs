@@ -121,8 +121,8 @@ async function buildExe() {
       },
       ignore: shouldIgnore,
       win32metadata: {
-        CompanyName: 'NetSentinel Enterprise',
-        FileDescription: 'NetSentinel Enterprise Packet & Threat Sentinel',
+        CompanyName: 'NetSentinel',
+        FileDescription: 'NetSentinel network monitor',
         OriginalFilename: `${APP_NAME}.exe`,
         ProductName: APP_NAME,
         InternalName: APP_NAME,

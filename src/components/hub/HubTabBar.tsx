@@ -60,7 +60,7 @@ export const HubTabBar: React.FC<HubTabBarProps> = ({
         }`}
       >
         <Globe2 className="w-4 h-4 text-emerald-400 shrink-0" />
-        <span className="truncate">Geo Threat Map</span>
+        <span className="truncate">Geo Map</span>
         <span className="px-2 py-0.5 text-[10px] bg-slate-800 rounded-full text-emerald-300 font-mono">
           {geoCount}
         </span>
