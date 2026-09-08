@@ -1,15 +1,14 @@
 import type { TrafficHistoryPoint } from '../types/network';
 
-/** Prefer explicit bytesIn/Out; fall back to legacy bytesSec split. */
+/** Prefer explicit bytesIn/Out; missing sides are 0 (no invented Rx/Tx split). */
 export function ratesFromHistoryPoint(point?: Partial<TrafficHistoryPoint> | null): {
   rxBytesPerSec: number;
   txBytesPerSec: number;
 } {
   if (!point) return { rxBytesPerSec: 0, txBytesPerSec: 0 };
-  const bytesSec = point.bytesSec || 0;
   return {
-    rxBytesPerSec: point.bytesIn ?? Math.floor(bytesSec * 0.7),
-    txBytesPerSec: point.bytesOut ?? Math.floor(bytesSec * 0.3),
+    rxBytesPerSec: point.bytesIn ?? 0,
+    txBytesPerSec: point.bytesOut ?? 0,
   };
 }
 

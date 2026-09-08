@@ -1,6 +1,6 @@
 import { getElectronIpc, isElectronShell } from '../utils/electronIpc';
 
-export type UserStoreKey = 'monitoring-config' | 'membership';
+export type UserStoreKey = 'monitoring-config' | 'membership' | 'quota-daily';
 
 /**
  * Renderer client for Electron userData JSON store.

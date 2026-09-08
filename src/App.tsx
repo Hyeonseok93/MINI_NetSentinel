@@ -67,7 +67,7 @@ export function App() {
           topProcessBytes={topProcess?.totalBytes ?? 0}
           topIp={topSession?.ip ?? null}
           topIpBytes={topSession?.totalBytes ?? 0}
-          currentBytesToday={totalBytes}
+          currentBytesToday={snap.bytesToday}
           dailyQuotaBytes={dailyQuotaBytes}
           onExpand={exitFloatMode}
           onToggleMonitoring={handleToggleMonitoring}
@@ -105,7 +105,9 @@ export function App() {
           />
 
           <BandwidthGaugeCard
-            processes={snap.groupedCumulativeProcesses}
+            processes={sortGroupedProcessesByBytesDesc(
+              groupProcessesByName(snap.processBreakdown)
+            )}
             history={snap.history}
           />
 
@@ -123,7 +125,7 @@ export function App() {
             geoNodes={snap.geoNodes}
             cumulativeGeoNodes={snap.cumulativeGeoNodes}
             myPublicGeo={snap.myPublicGeo}
-            totalBytes={totalBytes}
+            totalBytes={snap.bytesToday}
             dailyQuotaBytes={dailyQuotaBytes}
             unresolvedAnomalyCount={unresolvedAnomalies.length}
             actions={engineActions}

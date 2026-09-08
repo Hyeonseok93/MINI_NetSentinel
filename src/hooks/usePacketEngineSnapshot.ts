@@ -29,6 +29,7 @@ export type EngineSnapshot = {
   geoNodes: GeoNode[];
   cumulativeGeoNodes: GeoNode[];
   cumulativeSessions: IpSession[];
+  bytesToday: number;
   myPublicGeo: ReturnType<typeof packetEngine.getMyPublicGeo>;
 };
 
@@ -48,6 +49,7 @@ function readSnapshot(): EngineSnapshot {
     geoNodes: packetEngine.getGeoNodes(),
     cumulativeGeoNodes: packetEngine.getCumulativeGeoNodes(),
     cumulativeSessions: packetEngine.getCumulativeSessions(),
+    bytesToday: packetEngine.getBytesToday(),
     myPublicGeo: packetEngine.getMyPublicGeo(),
   };
 }
@@ -61,16 +63,18 @@ export function usePacketEngineSnapshot(isMonitoring: boolean, refreshIntervalMs
   }, []);
 
   useEffect(() => {
-    if (!isMonitoring) {
-      packetEngine.stop();
-      return;
-    }
-
-    packetEngine.start(refreshIntervalMs);
-
+    // Keep subscription even while paused so Settings mutations (block/trust/reset)
+    // still refresh the UI; only polling is gated by isMonitoring.
     const unsubscribe = packetEngine.subscribe(() => {
       setSnapshot(readSnapshot());
     });
+    setSnapshot(readSnapshot());
+
+    if (isMonitoring) {
+      packetEngine.start(refreshIntervalMs);
+    } else {
+      packetEngine.stop();
+    }
 
     return () => {
       unsubscribe();

@@ -190,7 +190,7 @@ export const HubGeoGrid: React.FC<HubGeoGridProps> = ({
             const isExpanded = expandedCountries.has(node.country);
             const continentName = getContinentName(node.countryCode, node.country);
 
-            // Filter IP Sessions connecting to this country (Live vs Permanent Cumulative History)
+            // Sessions for this country (live poll vs cumulative this run)
             const matchedSessions =
               geoSubTab === 'cumulative' && getCumulativeGeoSessions
                 ? getCumulativeGeoSessions(node.country)

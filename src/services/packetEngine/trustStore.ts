@@ -81,15 +81,17 @@ export class TrustStore {
 
   clearTrustedList(deps: TrustStoreDeps) {
     const keep = new Set(this.builtInTrustedIps);
+    const silent: TrustStoreDeps = { ...deps, notify: () => {} };
     Array.from(this.trustedIps).forEach((ip) => {
-      if (!keep.has(ip)) this.removeTrustedIp(ip, deps);
+      if (!keep.has(ip)) this.removeTrustedIp(ip, silent);
     });
     deps.notify();
   }
 
   clearVerifiedList(deps: TrustStoreDeps) {
+    const silent: TrustStoreDeps = { ...deps, notify: () => {} };
     Array.from(this.confirmedNormalIps).forEach((ip) => {
-      this.resetNormalStatus(ip, deps);
+      this.resetNormalStatus(ip, silent);
     });
     this.verifiedDomains.clear();
     deps.notify();

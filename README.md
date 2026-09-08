@@ -36,13 +36,14 @@ Output: `release/NetSentinel/NetSentinel.exe` (ship the whole folder).
 - **Spike** status means traffic above your packet/s threshold — not malware classification.
 - Blocking is **manual** only (Trusted / Verified / Blacklist). There is no auto threat block.
 - Session table has **Live** (current poll remotes) and **Cumulative** (seen this run) views, same idea as Apps / Geo. Spike / new-IP events are inventory signals, not malware detections.
+- **Daily quota** sums successful poll byte counters for the local calendar day (Npcap intervals; netstat usually near 0), persisted as `quota-daily.json`.
 - Vite `npm run dev` uses the same store shape under `data/dev-user-store/`.
 
 ## Persistence paths
 
 | Runtime | Location |
 |---------|----------|
-| Portable / Electron | `%APPDATA%/NetSentinel/store/` (`monitoring-config.json`, `membership.json`) |
+| Portable / Electron | `%APPDATA%/NetSentinel/store/` (`monitoring-config.json`, `membership.json`, `quota-daily.json`) |
 | Vite dev | `data/dev-user-store/` |
 | OS firewall blocks | Windows rules named `NetSentinel Block OUT/IN <ip>` |
 

@@ -1,12 +1,12 @@
 import type { AnomalyEvent } from '../../types/network';
 import { MAX_ANOMALY_EVENTS } from './constants';
+import { hasOpenAnomalyDuplicate } from './anomalyDedupe';
 
 export class AnomalyStore {
   events: AnomalyEvent[] = [];
 
   trigger(event: AnomalyEvent) {
-    const exists = this.events.some((e) => e.ip === event.ip && e.type === event.type);
-    if (!exists) {
+    if (!hasOpenAnomalyDuplicate(this.events, event)) {
       this.events.unshift(event);
       if (this.events.length > MAX_ANOMALY_EVENTS) {
         this.events.length = MAX_ANOMALY_EVENTS;

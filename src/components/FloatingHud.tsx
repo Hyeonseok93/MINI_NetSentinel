@@ -103,8 +103,8 @@ export const FloatingHud: React.FC<FloatingHudProps> = ({
   const captureLabel = captureMode === 'npcap' ? 'Npcap' : captureMode === 'netstat' ? 'Netstat' : '—';
 
   const slice = history.slice(-SPARK_POINTS);
-  const rxSeries = slice.map((p) => p.bytesIn ?? Math.floor((p.bytesSec || 0) * 0.7));
-  const txSeries = slice.map((p) => p.bytesOut ?? Math.floor((p.bytesSec || 0) * 0.3));
+  const rxSeries = slice.map((p) => p.bytesIn ?? 0);
+  const txSeries = slice.map((p) => p.bytesOut ?? 0);
   while (rxSeries.length < 2) rxSeries.push(rxSeries[0] ?? 0);
   while (txSeries.length < 2) txSeries.push(txSeries[0] ?? 0);
 

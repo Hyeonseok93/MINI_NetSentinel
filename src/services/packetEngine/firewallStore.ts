@@ -1,14 +1,7 @@
 import type { BlacklistedIpItem, IpSession } from '../../types/network';
 import { normalizeIpv4 } from '../../utils/ip';
 import { getElectronIpcOrWarn, isElectronShell } from '../../utils/electronIpc';
-
-type ConnectionStatus = {
-  mode: 'electron' | 'vite-dev' | 'offline';
-  ok: boolean;
-  lastError: string | null;
-  lastSuccessAt: string | null;
-  captureMode: 'npcap' | 'netstat' | 'unknown';
-};
+import type { ConnectionStatus } from './fetchLiveTelemetry';
 
 export type FirewallDeps = {
   sessions: Map<string, IpSession>;
@@ -87,14 +80,15 @@ export class FirewallStore {
           deps.notify();
         }
         return result;
-      } catch (err: any) {
+      } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : String(err);
         rollbackLocalBlock();
         deps.setConnectionStatus({
           ...deps.connectionStatus,
-          lastError: err?.message || 'Firewall block IPC failed',
+          lastError: message || 'Firewall block IPC failed',
         });
         deps.notify();
-        return { ok: false, error: err?.message || String(err) };
+        return { ok: false, error: message };
       }
     }
 
@@ -126,8 +120,9 @@ export class FirewallStore {
     if (ipc) {
       try {
         return await ipc.invoke('firewall-unblock-ip', safeIp);
-      } catch (err: any) {
-        return { ok: false, error: err?.message || String(err) };
+      } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : String(err);
+        return { ok: false, error: message };
       }
     }
     return { ok: false, error: 'Firewall IPC unavailable (UI-only unblock applied)' };

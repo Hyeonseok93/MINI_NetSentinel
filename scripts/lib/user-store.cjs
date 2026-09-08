@@ -6,7 +6,7 @@ const fs = require('fs');
 const path = require('path');
 const { normalizeIpv4 } = require('../../shared/ipv4.cjs');
 
-const ALLOWED_KEYS = Object.freeze(['monitoring-config', 'membership']);
+const ALLOWED_KEYS = Object.freeze(['monitoring-config', 'membership', 'quota-daily']);
 
 function assertKey(key) {
   const k = String(key || '');
@@ -80,6 +80,21 @@ function sanitizeMonitoringConfig(raw, defaults) {
   return { ...base, ...rest };
 }
 
+function emptyQuotaDaily() {
+  return { version: 1, day: '', bytes: 0 };
+}
+
+function sanitizeQuotaDaily(raw) {
+  if (!raw || typeof raw !== 'object') return emptyQuotaDaily();
+  const day = typeof raw.day === 'string' ? raw.day.slice(0, 32) : '';
+  const bytes = Number(raw.bytes);
+  return {
+    version: 1,
+    day,
+    bytes: Number.isFinite(bytes) && bytes > 0 ? bytes : 0,
+  };
+}
+
 function createUserStore(baseDir) {
   const root = path.resolve(baseDir);
 
@@ -109,9 +124,11 @@ function createUserStore(baseDir) {
       if (k === 'monitoring-config') {
         return raw && typeof raw === 'object' ? sanitizeMonitoringConfig(raw, {}) : null;
       }
+      if (k === 'quota-daily') return sanitizeQuotaDaily(raw);
       return raw;
     } catch (err) {
       if (k === 'membership') return emptyMembership();
+      if (k === 'quota-daily') return emptyQuotaDaily();
       return null;
     }
   }
@@ -126,6 +143,7 @@ function createUserStore(baseDir) {
       }
       payload = sanitizeMonitoringConfig(value, {});
     }
+    if (k === 'quota-daily') payload = sanitizeQuotaDaily(value);
     writeAtomic(fileFor(k), payload);
     return { ok: true, key: k };
   }
@@ -144,5 +162,7 @@ module.exports = {
   sanitizeBlockedList,
   sanitizeTrustedList,
   sanitizeMonitoringConfig,
+  sanitizeQuotaDaily,
   emptyMembership,
+  emptyQuotaDaily,
 };

@@ -23,7 +23,7 @@ export const HubQuotaPanel: React.FC<HubQuotaPanelProps> = ({
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2.5">
             <HardDrive className="w-5 h-5 text-amber-400" />
-            <h3 className="font-bold text-base text-slate-100">Daily Bandwidth Quota Monitor</h3>
+            <h3 className="font-bold text-base text-slate-100">Daily Bandwidth Quota</h3>
           </div>
 
           {isQuotaExceeded ? (
@@ -43,7 +43,7 @@ export const HubQuotaPanel: React.FC<HubQuotaPanelProps> = ({
 
         <div className="space-y-3">
           <div className="flex items-center justify-between text-sm font-mono">
-            <span className="text-slate-400">Total Today Usage:</span>
+            <span className="text-slate-400">Usage today (local day):</span>
             <div className="text-right">
               <span className="font-bold text-amber-300 text-base">{formatBytes(currentBytesToday)}</span>
               <span className="text-slate-500 text-xs"> / {formatBytes(dailyQuotaBytes)} Limit</span>
@@ -64,10 +64,14 @@ export const HubQuotaPanel: React.FC<HubQuotaPanelProps> = ({
           </div>
 
           <div className="flex items-center justify-between text-xs font-mono text-slate-500 pt-1">
-            <span>0 GB</span>
+            <span>0</span>
             <span className="font-bold text-slate-300">{quotaPercent}% Consumed</span>
             <span>{formatBytes(dailyQuotaBytes)}</span>
           </div>
+          <p className="text-[11px] text-slate-500">
+            Sum of successful poll byte counters for today (Npcap intervals; netstat mode usually stays near 0).
+            Resets at local midnight. Persisted across restarts.
+          </p>
         </div>
       </div>
     </div>

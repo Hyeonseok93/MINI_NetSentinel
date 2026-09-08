@@ -50,6 +50,11 @@ describe('user-store files', () => {
     assert.equal(cfg.spikeThresholdPacketsPerSec, 55);
     assert.equal(cfg.autoBlockSuspicious, undefined);
 
+    store.write('quota-daily', { version: 1, day: '2026-09-08', bytes: 12345 });
+    const quota = store.read('quota-daily');
+    assert.equal(quota.day, '2026-09-08');
+    assert.equal(quota.bytes, 12345);
+
     assert.throws(() => store.write('nope', {}), /Unknown user-store key/);
   });
 
@@ -66,5 +71,6 @@ describe('user-store files', () => {
     const store = createUserStore(dir);
     assert.equal(store.read('monitoring-config'), null);
     assert.deepEqual(store.read('membership'), { version: 1, trusted: [], verified: [], blocked: [] });
+    assert.deepEqual(store.read('quota-daily'), { version: 1, day: '', bytes: 0 });
   });
 });

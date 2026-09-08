@@ -288,7 +288,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
               </div>
             </div>
             <p className="text-[11px] text-slate-500 mt-1">
-              Specify exact daily network usage limit and unit (B, KB, MB, GB, TB).
+              Soft cap for today&apos;s captured bytes (local midnight reset). Needs Npcap for real byte growth;
+              Netstat mode usually stays near zero.
             </p>
           </div>
 

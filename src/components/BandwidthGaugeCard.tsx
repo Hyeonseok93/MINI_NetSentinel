@@ -104,15 +104,15 @@ export const BandwidthGaugeCard: React.FC<BandwidthGaugeCardProps> = ({ processe
         <div className="flex items-center justify-between text-xs font-mono pb-2 border-b border-slate-800/60">
           <div className="flex items-center gap-2 text-purple-400 font-bold">
             <Award className="w-4 h-4 text-purple-400" />
-            <span>TOP 5 BANDWIDTH CONSUMING PROCESSES</span>
+            <span>TOP 5 PROCESSES (THIS POLL)</span>
           </div>
-          <span className="text-[10px] text-slate-500 font-mono">Ranked by Volume</span>
+          <span className="text-[10px] text-slate-500 font-mono">Live interval volume</span>
         </div>
 
         <div className="flex-1 flex flex-col gap-2.5 justify-between py-1">
           {topProcesses.length === 0 ? (
             <div className="py-8 text-center text-slate-500 font-mono text-xs">
-              No active process traffic recorded.
+              No process traffic this poll.
             </div>
           ) : (
             topProcesses.map((proc, index) => {

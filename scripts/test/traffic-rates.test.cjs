@@ -9,7 +9,7 @@ const root = path.resolve(__dirname, '..', '..');
 const trafficTs = path.join(root, 'src', 'utils', 'trafficRates.ts');
 
 describe('trafficRates', () => {
-  it('prefers bytesIn/Out and falls back to bytesSec split', () => {
+  it('prefers bytesIn/Out and does not invent a 70/30 split', () => {
     const r = spawnSync(
       process.execPath,
       [
@@ -23,7 +23,7 @@ describe('trafficRates', () => {
           const a = ratesFromHistoryPoint({ bytesIn: 100, bytesOut: 20, bytesSec: 999 });
           if (a.rxBytesPerSec !== 100 || a.txBytesPerSec !== 20) process.exit(2);
           const b = ratesFromHistoryPoint({ bytesSec: 100 });
-          if (b.rxBytesPerSec !== 70 || b.txBytesPerSec !== 30) process.exit(3);
+          if (b.rxBytesPerSec !== 0 || b.txBytesPerSec !== 0) process.exit(3);
           const c = latestTrafficRates([]);
           if (c.rxBytesPerSec !== 0) process.exit(4);
           const d = latestTrafficRates([{ time: 'x', packetsIn: 0, packetsOut: 0, bytesSec: 0, bytesIn: 5, bytesOut: 1 }]);

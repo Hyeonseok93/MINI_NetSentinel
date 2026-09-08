@@ -60,7 +60,42 @@ export class GeoStore {
     }
   }
 
-  /** Live geo from current sessions; also refreshes cumulative highs. */
+  /**
+   * Refresh cumulative country highs from the current live session set.
+   * Call after ingest ticks — not from UI getters.
+   */
+  refreshCumulativeHighs(sessions: Iterable<IpSession>) {
+    const liveByCountry = new Map<string, { count: number; bytes: number; code: string }>();
+    for (const sess of sessions) {
+      const country = sess.country || 'Unknown Location';
+      const code =
+        sess.countryCode ||
+        (country === 'South Korea' ? 'KR' : country === 'United States' ? 'US' : 'NET');
+      const row = liveByCountry.get(country) || { count: 0, bytes: 0, code };
+      row.count += 1;
+      row.bytes += sess.totalBytes;
+      if (code && code !== 'NET') row.code = code;
+      liveByCountry.set(country, row);
+    }
+
+    liveByCountry.forEach((val, country) => {
+      if (!this.cumulativeGeoMap.has(country)) {
+        this.cumulativeGeoMap.set(country, {
+          country,
+          countryCode: val.code || 'NET',
+          activeIpCount: val.count,
+          totalBytes: val.bytes,
+        });
+      } else {
+        const cNode = this.cumulativeGeoMap.get(country)!;
+        cNode.activeIpCount = Math.max(cNode.activeIpCount, val.count);
+        cNode.totalBytes = Math.max(cNode.totalBytes, val.bytes);
+        if (val.code && val.code !== 'NET') cNode.countryCode = val.code;
+      }
+    });
+  }
+
+  /** Live geo aggregates from current sessions (read-only). */
   getLiveGeoNodes(sessions: Iterable<IpSession>): GeoNode[] {
     const geoMap = new Map<string, { count: number; bytes: number; code: string }>();
     for (const sess of sessions) {
@@ -75,22 +110,12 @@ export class GeoStore {
 
     const result: GeoNode[] = [];
     geoMap.forEach((val, country) => {
-      const nodeItem: GeoNode = {
+      result.push({
         country,
         countryCode: val.code || 'NET',
         activeIpCount: val.count,
         totalBytes: val.bytes,
-      };
-      result.push(nodeItem);
-
-      if (!this.cumulativeGeoMap.has(country)) {
-        this.cumulativeGeoMap.set(country, { ...nodeItem });
-      } else {
-        const cNode = this.cumulativeGeoMap.get(country)!;
-        cNode.activeIpCount = Math.max(cNode.activeIpCount, val.count);
-        cNode.totalBytes = Math.max(cNode.totalBytes, val.bytes);
-        if (val.code && val.code !== 'NET') cNode.countryCode = val.code;
-      }
+      });
     });
 
     return result.filter((n) => n.activeIpCount > 0).sort((a, b) => b.activeIpCount - a.activeIpCount);

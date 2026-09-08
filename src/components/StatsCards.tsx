@@ -53,7 +53,7 @@ export const StatsCards: React.FC<StatsCardsProps> = ({
         </div>
       </div>
 
-      {/* Anomalies Detected */}
+      {/* Open events */}
       <div className="glass-panel p-4 rounded-2xl flex items-center justify-between border border-slate-800/80 hover:border-rose-500/30 transition-all duration-300">
         <div>
           <p className="text-xs font-medium text-slate-400">Open events</p>
