@@ -32,7 +32,7 @@ Output: `release/NetSentinel/NetSentinel.exe` (ship the whole folder).
 
 ## Limits (read this)
 
-- **IPv4 + TCP ESTABLISHED** focused. IPv6 and UDP visibility are weak or absent.
+- **IPv4 TCP + UDP** focused (ESTABLISHED TCP and UDP remotes with a real foreign address). IPv6 visibility is weak or absent.
 - **Spike** status means traffic above your packet/s threshold — not malware classification.
 - Blocking is **manual** only (Trusted / Verified / Blacklist). There is no auto threat block.
 - Trusted / Verified / Blacklist and monitoring settings persist as JSON under Electron `userData/store/`. Blacklist also syncs with NetSentinel-named Windows Firewall rules when possible.

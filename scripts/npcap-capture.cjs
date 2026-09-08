@@ -23,7 +23,10 @@ const MAX_CUMULATIVE_IPS = 10000;
 
 /**
  * Lifetime counters per remote IP (for interval deltas only — not UI history).
- * @type {Map<string, { packetsIn: number, packetsOut: number, bytesIn: number, bytesOut: number, lastSeenMs: number }>}
+ * @type {Map<string, {
+ *   packetsIn: number, packetsOut: number, bytesIn: number, bytesOut: number, lastSeenMs: number,
+ *   sawTcp: boolean, sawUdp: boolean, lastPort: number, preferredProtocol: 'TCP' | 'UDP' | null
+ * }>}
  */
 const cumulative = new Map();
 /** @type {Map<string, { packetsIn: number, packetsOut: number, bytesIn: number, bytesOut: number }>} */
@@ -46,11 +49,31 @@ function refreshLocalIps() {
   }
 }
 
-function addStat(ip, direction, byteLen) {
+function emptyCumulativeRow() {
+  return {
+    packetsIn: 0,
+    packetsOut: 0,
+    bytesIn: 0,
+    bytesOut: 0,
+    lastSeenMs: 0,
+    sawTcp: false,
+    sawUdp: false,
+    lastPort: 0,
+    preferredProtocol: null,
+  };
+}
+
+/**
+ * @param {string} ip
+ * @param {'in' | 'out'} direction
+ * @param {number} byteLen
+ * @param {{ protocol?: string, port?: number }} [meta]
+ */
+function addStat(ip, direction, byteLen, meta) {
   if (!ip || ip === '0.0.0.0' || ip.startsWith('127.')) return;
   let row = cumulative.get(ip);
   if (!row) {
-    row = { packetsIn: 0, packetsOut: 0, bytesIn: 0, bytesOut: 0, lastSeenMs: 0 };
+    row = emptyCumulativeRow();
     cumulative.set(ip, row);
   }
   if (direction === 'in') {
@@ -61,6 +84,19 @@ function addStat(ip, direction, byteLen) {
     row.bytesOut += byteLen;
   }
   row.lastSeenMs = Date.now();
+
+  const proto = meta && typeof meta.protocol === 'string' ? meta.protocol : '';
+  const port = meta && Number.isFinite(Number(meta.port)) ? Number(meta.port) : 0;
+  if (proto === 'TCP') {
+    row.sawTcp = true;
+    if (port > 0) row.lastPort = port;
+    // TCP wins preferred label when both seen
+    row.preferredProtocol = 'TCP';
+  } else if (proto === 'UDP') {
+    row.sawUdp = true;
+    if (port > 0 && !row.sawTcp) row.lastPort = port;
+    if (!row.sawTcp) row.preferredProtocol = 'UDP';
+  }
 }
 
 const { handleFrame } = createFrameHandler({
@@ -279,7 +315,10 @@ function takeIntervalStats() {
     } catch (_) {}
   }
 
-  /** @type {Map<string, { packetsIn: number, packetsOut: number, bytesIn: number, bytesOut: number }>} */
+  /** @type {Map<string, {
+   *   packetsIn: number, packetsOut: number, bytesIn: number, bytesOut: number,
+   *   protocol: 'TCP' | 'UDP' | null, port: number, sawTcp: boolean, sawUdp: boolean
+   * }>} */
   const delta = new Map();
   for (const [ip, cur] of cumulative.entries()) {
     const prev = lastSnapshot.get(ip) || { packetsIn: 0, packetsOut: 0, bytesIn: 0, bytesOut: 0 };
@@ -288,6 +327,10 @@ function takeIntervalStats() {
       packetsOut: Math.max(0, cur.packetsOut - prev.packetsOut),
       bytesIn: Math.max(0, cur.bytesIn - prev.bytesIn),
       bytesOut: Math.max(0, cur.bytesOut - prev.bytesOut),
+      protocol: cur.preferredProtocol,
+      port: cur.lastPort || 0,
+      sawTcp: !!cur.sawTcp,
+      sawUdp: !!cur.sawUdp,
     };
     if (d.packetsIn || d.packetsOut || d.bytesIn || d.bytesOut) {
       delta.set(ip, d);

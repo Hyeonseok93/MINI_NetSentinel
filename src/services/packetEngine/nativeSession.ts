@@ -47,5 +47,8 @@ export function extractNativeTraffic(native: NativeIpSession) {
 const KNOWN_PROTOCOLS = new Set(['TCP', 'UDP', 'ICMP', 'HTTPS', 'DNS']);
 
 export function normalizeProtocol(protocol: string): IpSession['protocol'] {
-  return (KNOWN_PROTOCOLS.has(protocol) ? protocol : 'TCP') as IpSession['protocol'];
+  const p = String(protocol || '').toUpperCase();
+  if (KNOWN_PROTOCOLS.has(p)) return p as IpSession['protocol'];
+  // Telemetry emits TCP/UDP; unknown leftovers default to TCP for UI typing only.
+  return 'TCP';
 }
